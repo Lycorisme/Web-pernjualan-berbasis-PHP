@@ -38,7 +38,14 @@ $role = $_SESSION['role'] ?? 'guest';
             white-space: nowrap;
         }
         .sidebar .nav-link:hover { color: #fff; background-color: rgba(255, 255, 255, 0.1); }
-        .sidebar .nav-link.active { color: #fff; background-color: #0d6efd; border-left: 3px solid #fff; padding-left: calc(1rem - 3px); }
+        /* MODIFIKASI CSS UNTUK MENGATASI LEBAR YANG BERLEBIH */
+        .sidebar .nav-link.active { 
+            color: #fff; 
+            background-color: #0d6efd; 
+            border-left: 3px solid #fff; 
+            /* Mengurangi padding-left agar tidak terlalu menjorok */
+            padding-left: 1rem; /* Biarkan sama dengan nav-link normal */
+        }
         .sidebar .nav-link i.fas { width: 20px; margin-right: 0.75rem; text-align: center; }
         .main-content { 
             padding: 0;
@@ -87,7 +94,8 @@ $role = $_SESSION['role'] ?? 'guest';
                             <li class="nav-item"><a class="nav-link <?= in_array($current_page, ['form_barang_supplier.php', 'form_tambah_barang_supplier.php']) ? 'active' : '' ?>" href="form_barang_supplier.php"><i class="fas fa-box"></i> Barang Saya</a></li>
                             <li class="nav-item"><a class="nav-link <?= $current_page == 'kelola_pembayaran.php' ? 'active' : '' ?>" href="kelola_pembayaran.php"><i class="fas fa-hand-holding-usd"></i> Kelola Pembayaran</a></li>
                             <li class="nav-item"><a class="nav-link <?= $current_page == 'barang_terjual.php' ? 'active' : '' ?>" href="barang_terjual.php"><i class="fas fa-history"></i> Barang Terjual</a></li>
-                            <li class="nav-item"><a class="nav-link <?= $current_page == 'retur_supplier.php' ? 'active' : '' ?>" href="retur_supplier.php"><i class="fas fa-undo"></i> Barang Retur</a></li>
+                            <li class="nav-item"><a class="nav-link <?= $current_page == 'retur_supplier.php' ? 'active' : '' ?>" href="retur_supplier.php"><i class="fas fa-inbox"></i> Permintaan Retur</a></li>
+                            <li class="nav-item"><a class="nav-link <?= $current_page == 'barang_diretur_page.php' ? 'active' : '' ?>" href="barang_diretur_page.php"><i class="fas fa-dolly-flatbed"></i> Barang Retur</a></li>
                             <li class="nav-item"><a class="nav-link <?= $current_page == 'laporan_supplier.php' ? 'active' : '' ?>" href="laporan_supplier.php"><i class="fas fa-chart-pie"></i> Laporan</a></li>
 
                         <?php elseif ($role === 'kasir'): ?>

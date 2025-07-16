@@ -25,9 +25,9 @@ try {
         throw new Exception('Gagal mengonfirmasi atau pembelian tidak ditemukan.');
     }
 
-    // 2. Ambil semua item dari detail pembelian, TERMASUK FOTO PRODUK
+    // 2. Ambil semua item dari detail pembelian, TERMASUK SEMUA DETAIL DARI TABEL BARANG SUPPLIER
     $stmt_get_items = $koneksi->prepare(
-        "SELECT pd.jumlah, pd.harga, b.nama_barang, b.kategori_id, b.satuan_id, b.foto_produk 
+        "SELECT pd.jumlah, pd.harga, b.kode_barang, b.nama_barang, b.kategori_id, b.satuan_id, b.harga_jual, b.foto_produk 
          FROM pembelian_detail pd
          JOIN barang b ON pd.barang_id = b.id
          WHERE pd.pembelian_id = ?"
@@ -36,65 +36,71 @@ try {
     $stmt_get_items->execute();
     $items_result = $stmt_get_items->get_result();
 
-    // Siapkan statement untuk mengecek, mengupdate, dan menginsert barang utama
-    $stmt_check_main_item = $koneksi->prepare("SELECT id FROM barang WHERE nama_barang = ? AND supplier_id IS NULL");
-    $stmt_update_stock = $koneksi->prepare("UPDATE barang SET stok = stok + ? WHERE id = ?");
-    
-    // PERBAIKAN: Tambahkan 'foto_produk' ke dalam query INSERT
-    $stmt_insert_new_item = $koneksi->prepare(
-        "INSERT INTO barang (kode_barang, nama_barang, kategori_id, satuan_id, harga_beli, harga_jual, stok, foto_produk) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    );
-
-    // 3. Loop setiap item untuk ditambahkan ke inventaris utama
+    // 3. Loop setiap item untuk ditambahkan ke inventaris utama (admin)
     while ($item = $items_result->fetch_assoc()) {
-        $nama_barang = $item['nama_barang'];
+        $kode_barang_dari_supplier = $item['kode_barang'];
+        $nama_barang_dari_supplier = $item['nama_barang'];
         $jumlah_dibeli = $item['jumlah'];
-        
-        $stmt_check_main_item->bind_param("s", $nama_barang);
-        $stmt_check_main_item->execute();
-        $main_item_result = $stmt_check_main_item->get_result();
+        $harga_beli_item = $item['harga']; // Harga beli saat pembelian
+        $harga_jual_item = $item['harga_jual']; // Harga jual dari supplier
+        $kategori_id_item = $item['kategori_id'];
+        $satuan_id_item = $item['satuan_id'];
+        $foto_produk_item = $item['foto_produk'];
 
-        if ($main_item_result->num_rows > 0) {
-            // Jika barang sudah ada, cukup update stoknya
-            $main_item = $main_item_result->fetch_assoc();
-            $stmt_update_stock->bind_param("ii", $jumlah_dibeli, $main_item['id']);
-            if (!$stmt_update_stock->execute()) {
-                throw new Exception("Gagal mengupdate stok untuk barang: " . $nama_barang);
+        // A. Cek apakah barang dengan `kode_barang` ini sudah ada di tabel `barang` (GLOBAL CHECK)
+        $stmt_check_existing_item = $koneksi->prepare("SELECT id, supplier_id FROM barang WHERE kode_barang = ?");
+        $stmt_check_existing_item->bind_param("s", $kode_barang_dari_supplier);
+        $stmt_check_existing_item->execute();
+        $existing_item = $stmt_check_existing_item->get_result()->fetch_assoc();
+
+        if ($existing_item) {
+            // Barang sudah ada di tabel `barang` (bisa milik admin atau supplier lain)
+            $existing_item_id = $existing_item['id'];
+            
+            // Perbarui item yang ada: tambahkan stok, update harga beli, harga jual, foto, dan set supplier_id ke NULL (milik admin)
+            $update_query = "UPDATE barang SET stok = stok + ?, harga_beli = ?, harga_jual = ?, foto_produk = ?, supplier_id = NULL WHERE id = ?";
+            $stmt_update_existing = $koneksi->prepare($update_query);
+            $stmt_update_existing->bind_param(
+                "iddsi", 
+                $jumlah_dibeli, 
+                $harga_beli_item, 
+                $harga_jual_item, 
+                $foto_produk_item, 
+                $existing_item_id
+            );
+            if (!$stmt_update_existing->execute()) {
+                throw new Exception("Gagal mengupdate barang yang sudah ada (ID: {$existing_item_id}): " . $stmt_update_existing->error);
             }
         } else {
-            // Jika barang belum ada, tambahkan sebagai produk baru
-            $kode_barang_baru = generateKodeBarang();
-            $harga_beli = $item['harga'];
-            $harga_jual = $item['harga']; // Harga jual sementara disamakan
-            $kategori_id = $item['kategori_id'];
-            $satuan_id = $item['satuan_id'];
-            $foto_produk = $item['foto_produk']; // Ambil nama file foto
-
-            // PERBAIKAN: Tambahkan 's' untuk foto_produk (string) dan variabelnya
+            // Barang belum ada di tabel `barang` secara global, maka INSERT sebagai barang baru milik admin
+            $stmt_insert_new_item = $koneksi->prepare(
+                "INSERT INTO barang (kode_barang, nama_barang, kategori_id, satuan_id, harga_beli, harga_jual, stok, supplier_id, foto_produk) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)"
+            );
+            // Parameter: s, s, i, i, d, d, i, s
             $stmt_insert_new_item->bind_param(
                 "ssiiddis", 
-                $kode_barang_baru, 
-                $nama_barang, 
-                $kategori_id, 
-                $satuan_id, 
-                $harga_beli, 
-                $harga_jual, 
-                $jumlah_dibeli,
-                $foto_produk // Variabel foto disertakan
+                $kode_barang_dari_supplier, 
+                $nama_barang_dari_supplier, 
+                $kategori_id_item, 
+                $satuan_id_item, 
+                $harga_beli_item, 
+                $harga_jual_item, 
+                $jumlah_dibeli, 
+                $foto_produk_item
             );
-
             if (!$stmt_insert_new_item->execute()) {
-                throw new Exception("Gagal menambahkan barang baru: " . $nama_barang . " - " . $stmt_insert_new_item->error);
+                throw new Exception("Gagal menambahkan barang baru: " . $nama_barang_dari_supplier . " - " . $stmt_insert_new_item->error);
             }
         }
     }
 
     $koneksi->commit();
-    echo json_encode(['success' => true, 'message' => 'Pembayaran telah dikonfirmasi dan stok barang telah diperbarui!']);
+    echo json_encode(['success' => true, 'message' => 'Pembayaran telah dikonfirmasi dan stok barang admin telah diperbarui!']);
 
 } catch (Exception $e) {
     $koneksi->rollback();
+    error_log("Error in konfirmasi_pembayaran_supplier.php: " . $e->getMessage()); // Tambahkan logging
     echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan: ' . $e->getMessage()]);
 }
 ?>

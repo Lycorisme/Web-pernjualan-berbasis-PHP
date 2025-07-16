@@ -41,7 +41,6 @@ if ($is_edit) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // ... (logika untuk memproses form POST tidak diubah, karena sudah benar)
     $kode_barang = sanitize($_POST['kode_barang']);
     $nama_barang = sanitize($_POST['nama_barang']);
     $kategori_id = (int)$_POST['kategori_id'];
@@ -63,12 +62,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($harga_jual <= $harga_beli) $errors[] = "Harga jual harus lebih besar dari harga beli.";
     if ($stok < 0) $errors[] = "Stok tidak boleh kurang dari 0.";
     
+    // VALIDASI BARU: Pastikan kode barang unik secara GLOBAL (kecuali saat edit barang itu sendiri)
+    $stmt_check_kode = $koneksi->prepare("SELECT id FROM barang WHERE kode_barang = ? AND id != ?");
+    $stmt_check_kode->bind_param("si", $kode_barang, $is_edit ? $id : 0);
+    $stmt_check_kode->execute();
+    if ($stmt_check_kode->get_result()->num_rows > 0) {
+        $errors[] = "Kode barang '<strong>" . htmlspecialchars($kode_barang) . "</strong>' sudah ada di sistem. Mohon gunakan kode lain.";
+    }
+
     $foto_produk = null;
     if (isset($_FILES['foto_produk']) && $_FILES['foto_produk']['error'] !== UPLOAD_ERR_NO_FILE) {
         $uploadResult = handleProductPhotoUpload(
             $_FILES['foto_produk'], 
             __DIR__ . '/uploads/produk/', 
-            $is_edit ? $barang['foto_produk'] : null
+            $is_edit ? ($barang['foto_produk'] ?? null) : null
         );
         
         if (isset($uploadResult['error'])) {
@@ -80,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($errors)) {
         if ($is_edit) {
+            // Kode barang tidak diubah saat edit, jadi cukup update lainnya
             if ($foto_produk) {
                 $stmt = $koneksi->prepare("UPDATE barang SET nama_barang = ?, kategori_id = ?, satuan_id = ?, harga_beli = ?, harga_jual = ?, stok = ?, foto_produk = ? WHERE id = ? AND supplier_id IS NULL");
                 $stmt->bind_param("siiddisi", $nama_barang, $kategori_id, $satuan_id, $harga_beli, $harga_jual, $stok, $foto_produk, $id);
@@ -89,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $action_text = 'diperbarui';
         } else {
+            // Untuk penambahan, gunakan kode_barang yang sudah divalidasi keunikannya secara global
             $stmt = $koneksi->prepare("INSERT INTO barang (kode_barang, nama_barang, kategori_id, satuan_id, harga_beli, harga_jual, stok, foto_produk, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)");
             $stmt->bind_param("ssiiddis", $kode_barang, $nama_barang, $kategori_id, $satuan_id, $harga_beli, $harga_jual, $stok, $foto_produk);
             $action_text = 'ditambahkan';
@@ -99,7 +108,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: barang.php");
             exit();
         } else {
-            $errors[] = "Gagal menyimpan ke database: " . $koneksi->error;
+            // Tangkap error dari database jika terjadi kegagalan eksekusi (misal: duplikasi kode barang yang tidak tertangkap validasi)
+            $db_error_message = $koneksi->error;
+            if (strpos($db_error_message, 'Duplicate entry') !== false && strpos($db_error_message, 'kode_barang') !== false) {
+                 $errors[] = "Gagal menyimpan: Kode barang '<strong>" . htmlspecialchars($kode_barang) . "</strong>' sudah ada (duplikasi terdeteksi di database).";
+            } else {
+                 $errors[] = "Gagal menyimpan ke database: " . $db_error_message;
+            }
         }
     }
 }
@@ -116,7 +131,10 @@ require_once __DIR__ . '/template/header.php';
             </div>
             <div class="card-body">
                 <form method="POST" action="form_barang.php<?= $is_edit ? '?id=' . $id : '' ?>" enctype="multipart/form-data">
-                    
+                    <?php if (isset($errors) && !empty($errors)): ?>
+                    <div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $error) echo "<li>".$error."</li>"; ?></ul></div>
+                    <?php endif; ?>
+
                     <div class="row mb-3">
                         <label for="kode_barang" class="col-sm-3 col-form-label">Kode Barang</label>
                         <div class="col-sm-9">
@@ -223,10 +241,6 @@ require_once __DIR__ . '/template/header.php';
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-// Seluruh JavaScript di bawah ini tidak diubah.
-// Logikanya sudah benar: ia akan mengambil nilai APA PUN yang ada di dalam
-// input 'currency' saat halaman dimuat, lalu memformatnya.
-// Karena PHP sudah memasukkan angka mentah dari database, maka angka itulah yang akan diformat.
 document.addEventListener('DOMContentLoaded', function() {
     <?php if (isset($_SESSION['alert'])): ?>
         const alertData = <?= json_encode($_SESSION['alert']) ?>;
@@ -242,7 +256,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <?php if (isset($errors) && !empty($errors)): ?>
         Swal.fire({
             title: 'Error!',
-            html: '<?= implode("<br>", array_map("htmlspecialchars", $errors)) ?>',
+            html: '<?= implode("<br>", array_map(function($e){return addslashes($e);}, $errors)) ?>',
             icon: 'error',
             confirmButtonText: 'OK'
         });
@@ -256,16 +270,20 @@ document.addEventListener('DOMContentLoaded', function() {
         kategoriSelect.addEventListener('change', function() {
             const kategoriId = this.value;
             if (!kategoriId) {
+                // Saat kategori tidak dipilih, kembalikan ke kode otomatis awal
                 kodeBarangInput.value = '<?= $kode_barang_otomatis ?>';
                 return;
             }
+            // Karena generateKodeBarang() di PHP akan memastikan keunikan global,
+            // ini hanya untuk tampilan awal di frontend berdasarkan kategori.
+            // Kode aktual akan divalidasi dan mungkin di-regenerate di backend.
             const selectedOption = this.options[this.selectedIndex];
             const kategoriText = selectedOption.text;
             let kodeKategori = kategoriText.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '');
             while (kodeKategori.length < 3) kodeKategori += 'X';
             const randomNum = Math.floor(Math.random() * 999) + 1;
             const nomorUrut = String(randomNum).padStart(3, '0');
-            kodeBarangInput.value = kodeKategori + nomorUrut;
+            kodeBarangInput.value = kodeKategori + '-' + nomorUrut; // Format kode_barang sesuai backend
         });
     }
 
@@ -355,9 +373,3 @@ function hapusFoto(barangId) {
         }
     });
 }
-</script>
-
-<?php
-// Memuat footer
-require_once __DIR__ . '/template/footer.php';
-?>

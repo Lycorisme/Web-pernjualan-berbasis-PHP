@@ -2,7 +2,6 @@
 // FILE INTI - WAJIB ADA DI ATAS
 require_once __DIR__ . '/config/koneksi.php';
 require_once __DIR__ . '/functions/helper.php';
-// PERUBAHAN: Menambahkan file upload handler yang sudah ada di sistem Anda
 require_once __DIR__ . '/system/upload_handler.php';
 
 // Proteksi Halaman
@@ -19,7 +18,7 @@ $stmt_kategori->execute();
 $kategoris = $stmt_kategori->get_result();
 
 $satuans = $koneksi->query("SELECT * FROM satuan ORDER BY nama_satuan");
-$kode_barang_otomatis = generateKodeBarang();
+$kode_barang_otomatis = generateKodeBarang(); // Menggunakan fungsi yang memastikan kode unik global
 
 // Menangani form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -32,14 +31,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stok = (int)$_POST['stok'];
     
     $errors = [];
+    if (empty($kode_barang)) $errors[] = "Kode barang tidak boleh kosong.";
     if (empty($nama_barang)) $errors[] = "Nama barang tidak boleh kosong.";
     if ($kategori_id <= 0) $errors[] = "Kategori harus dipilih.";
     if ($harga_dari_supplier <= 0) $errors[] = "Harga harus diisi.";
 
-    // PERUBAHAN: Logika untuk menangani upload foto produk
+    // VALIDASI BARU: Pastikan kode barang unik secara GLOBAL (penting untuk Pendekatan A)
+    $stmt_check_kode = $koneksi->prepare("SELECT id FROM barang WHERE kode_barang = ?");
+    $stmt_check_kode->bind_param("s", $kode_barang);
+    $stmt_check_kode->execute();
+    if ($stmt_check_kode->get_result()->num_rows > 0) {
+        $errors[] = "Kode barang '<strong>" . htmlspecialchars($kode_barang) . "</strong>' sudah ada di sistem. Mohon gunakan kode lain.";
+    }
+
     $foto_produk_nama = null; // Default value jika tidak ada foto diupload
     if (isset($_FILES['foto_produk']) && $_FILES['foto_produk']['error'] !== UPLOAD_ERR_NO_FILE) {
-        // Menggunakan fungsi handler yang sudah ada untuk proses upload
         $uploadResult = handleProductPhotoUpload(
             $_FILES['foto_produk'],
             __DIR__ . '/uploads/produk/'
@@ -53,12 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        // PERUBAHAN: Query INSERT diperbarui untuk menyertakan kolom foto_produk
+        // Query INSERT sekarang akan menggunakan kode_barang yang sudah divalidasi keunikannya secara global
         $stmt = $koneksi->prepare(
             "INSERT INTO barang (kode_barang, nama_barang, kategori_id, satuan_id, harga_beli, harga_jual, stok, supplier_id, foto_produk) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
-        // PERUBAHAN: bind_param diperbarui dengan parameter untuk foto_produk (s untuk string)
         $stmt->bind_param("ssiiddiis", $kode_barang, $nama_barang, $kategori_id, $satuan_id, $harga_dari_supplier, $harga_dari_supplier, $stok, $supplier_id, $foto_produk_nama);
         
         if ($stmt->execute()) {
@@ -66,11 +71,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: form_barang_supplier.php");
             exit();
         } else {
-            // Jika gagal, hapus foto yang mungkin sudah terupload untuk mencegah file sampah
+            // Jika gagal menyimpan ke database (misal: duplikasi kode barang yang tidak tertangkap validasi), hapus foto
             if ($foto_produk_nama && file_exists(__DIR__ . '/uploads/produk/' . $foto_produk_nama)) {
                 unlink(__DIR__ . '/uploads/produk/' . $foto_produk_nama);
             }
-            $errors[] = "Gagal menyimpan ke database: " . $koneksi->error;
+            $db_error_message = $koneksi->error;
+            if (strpos($db_error_message, 'Duplicate entry') !== false && strpos($db_error_message, 'kode_barang') !== false) {
+                 $errors[] = "Gagal menyimpan: Kode barang '<strong>" . htmlspecialchars($kode_barang) . "</strong>' sudah ada (duplikasi terdeteksi di database).";
+            } else {
+                 $errors[] = "Gagal menyimpan ke database: " . $db_error_message;
+            }
         }
     }
 }
@@ -85,7 +95,7 @@ require_once __DIR__ . '/template/header.php';
             <div class="card-header bg-primary text-white"><h6 class="m-0 font-weight-bold"><?= $page_title ?></h6></div>
             <div class="card-body">
                 <?php if (isset($errors) && !empty($errors)): ?>
-                <div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $error) echo "<li>".htmlspecialchars($error)."</li>"; ?></ul></div>
+                <div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $error) echo "<li>".$error."</li>"; ?></ul></div>
                 <?php endif; ?>
                 
                 <form method="POST" action="form_tambah_barang_supplier.php" enctype="multipart/form-data">
@@ -102,7 +112,7 @@ require_once __DIR__ . '/template/header.php';
                         <div class="col-sm-9">
                             <select class="form-select" id="kategori_id" name="kategori_id" required>
                                 <option value="">-- Pilih Kategori Anda --</option>
-                                <?php if ($kategoris->num_rows > 0): while ($kategori = $kategoris->fetch_assoc()): ?>
+                                <?php if ($kategoris->num_rows > 0): mysqli_data_seek($kategoris, 0); while ($kategori = $kategoris->fetch_assoc()): ?>
                                 <option value="<?= $kategori['id'] ?>"><?= htmlspecialchars($kategori['nama_kategori']) ?></option>
                                 <?php endwhile; else: ?>
                                 <option value="" disabled>Anda belum membuat kategori. Silakan buat di halaman utama.</option>
@@ -169,7 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
         input.addEventListener('blur', function() { if(this.value) { this.value = formatToRupiah(this.value); }});
     });
 
-    // PERUBAHAN: Script untuk menampilkan preview gambar saat dipilih
+    // Script untuk menampilkan preview gambar saat dipilih
     const fotoInput = document.getElementById('foto_produk');
     const fotoPreviewContainer = document.getElementById('foto-preview-container');
 
