@@ -1,5 +1,5 @@
 <?php
-// FILE: functions/helper.php (Final & Lengkap)
+// FILE: functions/helper.php (Final & Lengkap - Tanpa Duplikasi Fungsi)
 
 // Menggunakan Class dari PHPMailer
 use PHPMailer\PHPMailer\PHPMailer;
@@ -182,7 +182,6 @@ function generateOrderNo($prefix = 'ORD') {
     $urutan = 0;
     if ($max_no) {
         // Ambil bagian nomor urut dari kode terakhir
-        $parts = explode('-', $max_no);
         $urutan = (int) substr($max_no, -3); // Ambil 3 digit terakhir
     }
     $urutan++;
@@ -195,27 +194,21 @@ function buatBadgeStatus($status) {
     $badge_class = '';
     switch ($status) {
         case 'Lunas':
-        case 'Disetujui':
-        case 'Selesai':
-        case 'Diterima Supplier': // NEW Order Status
+        case 'Selesai': // Final status for order
             $badge_class = 'bg-success';
             break;
-        case 'Proses':
-        case 'Menunggu Persetujuan':
-        case 'Barang Dikirim':
-        case 'Di Pesan':         // NEW Order Status
-        case 'Menunggu Kontrak': // NEW Order Status
-        case 'Kontrak Diunggah': // NEW Order Status
-        case 'Menunggu Pembayaran': // NEW Order Status
-        case 'Di Antar':         // NEW Order Status
+        case 'Di Pesan':
+        case 'Diterima Supplier':
+        case 'Menunggu Kontrak':
+        case 'Kontrak Diunggah':
+        case 'Menunggu Pembayaran':
             $badge_class = 'bg-info text-dark';
             break;
-        case 'Belum Lunas':
-            $badge_class = 'bg-warning text-dark';
+        case 'Di Antar':
+            $badge_class = 'bg-primary'; // Barang sedang dalam pengiriman
             break;
-        case 'Ditolak':
+        case 'Ditolak Supplier':
         case 'Dibatalkan':
-        case 'Ditolak Supplier': // NEW Order Status
             $badge_class = 'bg-danger';
             break;
         default:
@@ -328,112 +321,12 @@ function prosesPenerimaanBarangDariPembelian($pembelian_id) {
     }
 }
 
-// --- NEW EMAIL FUNCTIONS for Orders (Phase 3) ---
-
-// Fungsi untuk mengirim notifikasi pesanan baru ke supplier
-function send_new_order_email_to_supplier($recipientEmail, $supplierName, $orderNo, $adminName, $totalPrice, $loginLink) {
-    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) return false;
-    require_once __DIR__ . '/../vendor/autoload.php';
-
-    $mail = new PHPMailer(true);
-    try {
-        $mail->isSMTP();
-        $mail->Host = SMTP_HOST;
-        $mail->SMTPAuth = true;
-        $mail->Username = SMTP_USERNAME;
-        $mail->Password = SMTP_PASSWORD;
-        $mail->SMTPSecure = SMTP_SECURE;
-        $mail->Port = SMTP_PORT;
-        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
-        $mail->addAddress($recipientEmail, $supplierName);
-        $mail->isHTML(true);
-        $mail->Subject = 'PESANAN BARU dari Platinum Komputer - No: ' . $orderNo;
-        $mail->Body    = "
-            <h3>Yth. " . htmlspecialchars($supplierName) . ",</h3>
-            <p>Anda menerima pesanan baru dari <strong>Platinum Komputer</strong> dengan detail sebagai berikut:</p>
-            <table style='border-collapse: collapse; width: 100%; border: 1px solid #ddd;'>
-                <tr style='background-color: #f2f2f2;'><td style='padding: 8px; border: 1px solid #ddd; width: 30%;'><strong>No. Pesanan</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>" . htmlspecialchars($orderNo) . "</td></tr>
-                <tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Admin Pemesan</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>" . htmlspecialchars($adminName) . "</td></tr>
-                <tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Total Harga Pesanan</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>" . formatRupiah($totalPrice) . "</td></tr>
-            </table>
-            <br>
-            <p>Mohon segera login ke halaman pesanan di dasbor supplier Anda untuk meninjau dan mengkonfirmasi pesanan ini:</p>
-            <p style='text-align: center;'>
-                <a href='" . htmlspecialchars($loginLink) . "' style='background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>LOGIN KE DASBOR SUPPLIER</a>
-            </p>
-            <p>Terima kasih atas perhatian Anda.</p>
-            <p>Hormat kami,<br><strong>Platinum Komputer</strong></p>
-        ";
-        $mail->send();
-        return true;
-    } catch (Exception $e) {
-        error_log("Error sending new order email to supplier: " . $e->getMessage());
-        return false;
-    }
-}
-
-// Fungsi untuk mengirim notifikasi status pesanan ke admin (accept/reject)
-function send_order_status_update_email_to_admin($adminEmail, $orderNo, $supplierCompanyName, $statusBaru) {
-    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) return false;
-    require_once __DIR__ . '/../vendor/autoload.php';
-
-    $mail = new PHPMailer(true);
-    $status_color = '';
-    $subject_text = '';
-    $body_message = '';
-
-    switch ($statusBaru) {
-        case 'Diterima Supplier':
-            $status_color = '#28a745'; // Green
-            $subject_text = 'Pesanan Anda DITERIMA oleh Supplier!';
-            $body_message = "<p>Pesanan Anda dengan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah <b>DITERIMA</b> oleh supplier <strong>" . htmlspecialchars($supplierCompanyName) . "</strong>.</p>
-                             <p>Selanjutnya, supplier akan melengkapi detail serah terima/kontrak.</p>
-                             <p>Mohon pantau halaman Pesanan Anda untuk update berikutnya.</p>";
-            break;
-        case 'Ditolak Supplier':
-            $status_color = '#dc3545'; // Red
-            $subject_text = 'Pesanan Anda DITOLAK oleh Supplier';
-            $body_message = "<p>Dengan menyesal kami memberitahukan bahwa pesanan Anda dengan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah <b>DITOLAK</b> oleh supplier <strong>" . htmlspecialchars($supplierCompanyName) . "</strong>.</p>
-                             <p>Mohon periksa halaman Pesanan Anda atau hubungi supplier untuk informasi lebih lanjut.</p>";
-            break;
-        default:
-            $status_color = '#6c757d'; // Grey
-            $subject_text = 'Update Status Pesanan Anda - No: ' . $orderNo;
-            $body_message = "<p>Pesanan Anda dengan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah diperbarui statusnya menjadi: <strong style='color: " . $status_color . ";'>" . htmlspecialchars($statusBaru) . "</strong>.</p>
-                             <p>Mohon periksa halaman Pesanan Anda untuk detail.</p>";
-            break;
-    }
-
-    try {
-        $mail->isSMTP();
-        $mail->Host = SMTP_HOST;
-        $mail->SMTPAuth = true;
-        $mail->Username = SMTP_USERNAME;
-        $mail->Password = SMTP_PASSWORD;
-        $mail->SMTPSecure = SMTP_SECURE;
-        $mail->Port = SMTP_PORT;
-
-        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
-        $mail->addAddress($adminEmail, 'Admin Platinum Komputer');
-        $mail->isHTML(true);
-        $mail->Subject = $subject_text . ' - No: ' . $orderNo;
-        $mail->Body    = "
-            <h3>Halo Admin,</h3>
-            " . $body_message . "
-            <br>
-            <p>Hormat kami,<br><strong>Platinum Komputer</strong></p>
-        ";
-        $mail->send();
-        return true;
-    } catch (Exception $e) {
-        error_log("Error sending order status update email to admin: " . $e->getMessage());
-        return false;
-    }
-}
-
 
 function send_retur_request_email_to_supplier($recipientEmail, $supplierName, $returData) {
-    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) return false;
+    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) {
+        error_log("Email Error: Autoload atau SMTP_HOST tidak ditemukan.");
+        return false;
+    }
     require_once __DIR__ . '/../vendor/autoload.php';
 
     $mail = new PHPMailer(true);
@@ -464,6 +357,7 @@ function send_retur_request_email_to_supplier($recipientEmail, $supplierName, $r
         $mail->send();
         return true;
     } catch (Exception $e) {
+        error_log("PHPMailer Error (send_retur_request_email_to_supplier): " . $e->getMessage());
         return false;
     }
 }
@@ -503,6 +397,7 @@ function send_status_update_email_to_admin($adminEmail, $returData) {
         $mail->send();
         return true;
     } catch (Exception $e) {
+        error_log("PHPMailer Error (send_status_update_email_to_admin): " . $e->getMessage());
         return false;
     }
 }
@@ -540,6 +435,7 @@ function send_supplier_approval_email($recipientEmail, $supplierName, $loginLink
         $mail->send();
         return true;
     } catch (Exception $e) {
+        error_log("PHPMailer Error (send_supplier_approval_email): " . $e->getMessage());
         return false;
     }
 }
@@ -575,6 +471,7 @@ function send_supplier_rejection_email($recipientEmail, $companyName) {
         $mail->send();
         return true;
     } catch (Exception $e) {
+        error_log("PHPMailer Error (send_supplier_rejection_email): " . $e->getMessage());
         return false;
     }
 }
@@ -610,6 +507,192 @@ function send_admin_comment_email($recipientEmail, $supplierName, $adminName, $c
         $mail->send();
         return true;
     } catch (Exception $e) {
+        error_log("PHPMailer Error (send_admin_comment_email): " . $e->getMessage());
+        return false;
+    }
+}
+
+// --- NEW EMAIL FUNCTIONS FOR ORDER WORKFLOW (Phase 3 & 4) ---
+
+// Email ke Admin: Pesanan Diterima oleh Supplier (dengan/tanpa kontrak)
+function send_order_accepted_with_contract_email_to_admin($adminEmail, $orderNo, $supplierCompanyName, $amountToPay, $paymentTerms, $paymentDueDate, $orderPageLink) {
+    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) {
+        error_log("Email Error: Autoload atau SMTP_HOST tidak ditemukan.");
+        return false;
+    }
+    require_once __DIR__ . '/../vendor/autoload.php';
+
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SMTP_USERNAME;
+        $mail->Password = SMTP_PASSWORD;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port = SMTP_PORT;
+
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addAddress($adminEmail, 'Admin Platinum Komputer');
+        $mail->isHTML(true);
+        $mail->Subject = 'Pesanan Anda DITERIMA & Siap Diproses! - No: ' . $orderNo;
+        
+        $payment_details_html = '';
+        if (strtolower($paymentTerms) === 'tunai') {
+            $payment_details_html = "<p>Pembayaran akan dilakukan secara <strong>Tunai</strong>.</p>";
+        } else {
+            $payment_details_html = "
+                <p>Jumlah yang harus dibayarkan: <strong>" . formatRupiah($amountToPay) . "</strong>.</p>
+                <p>Ketentuan Pembayaran: " . nl2br(htmlspecialchars($paymentTerms)) . "</p>";
+            if ($paymentDueDate) {
+                $payment_details_html .= "<p>Tanggal Jatuh Tempo: <strong>" . formatTanggal($paymentDueDate) . "</strong></p>";
+            }
+        }
+
+        $mail->Body    = "
+            <h3>Halo Admin,</h3>
+            <p>Pesanan Anda dengan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah <b>DITERIMA</b> oleh supplier <strong>" . htmlspecialchars($supplierCompanyName) . "</strong>.</p>
+            <p>Berikut adalah detail pembayaran dan serah terima:</p>
+            " . $payment_details_html . "
+            <p>Mohon segera unggah kontrak pembelian yang sudah ditandatangani (jika diperlukan) atau lakukan pembayaran sesuai ketentuan.</p>
+            <p style='text-align: center;'>
+                <a href='" . htmlspecialchars($orderPageLink) . "' style='background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>LIHAT PESANAN DI SISTEM</a>
+            </p>
+            <p>Terima kasih.</p>
+            <p>Hormat kami,<br><strong>Platinum Komputer</strong></p>
+        ";
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("PHPMailer Error (send_order_accepted_with_contract_email_to_admin): " . $e->getMessage());
+        return false;
+    }
+}
+
+// Email ke Supplier: Admin sudah upload kontrak
+function send_contract_uploaded_email_to_supplier($supplierEmail, $supplierCompanyName, $orderNo, $orderPageLink) {
+    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) {
+        error_log("Email Error: Autoload atau SMTP_HOST tidak ditemukan.");
+        return false;
+    }
+    require_once __DIR__ . '/../vendor/autoload.php';
+
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SMTP_USERNAME;
+        $mail->Password = SMTP_PASSWORD;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port = SMTP_PORT;
+
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addAddress($supplierEmail, $supplierCompanyName);
+        $mail->isHTML(true);
+        $mail->Subject = 'Kontrak Pesanan Telah Diunggah oleh Admin - No: ' . $orderNo;
+        $mail->Body    = "
+            <h3>Yth. Tim " . htmlspecialchars($supplierCompanyName) . ",</h3>
+            <p>Admin Platinum Komputer telah berhasil mengunggah kontrak untuk pesanan nomor <strong>" . htmlspecialchars($orderNo) . "</strong>.</p>
+            <p>Anda dapat melihat dan mengunduh kontrak tersebut melalui halaman pesanan di dasbor Anda.</p>
+            <p>Mohon segera lakukan proses pengiriman barang sesuai kesepakatan.</p>
+            <p style='text-align: center;'>
+                <a href='" . htmlspecialchars($orderPageLink) . "' style='background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>LIHAT PESANAN DI SISTEM</a>
+            </p>
+            <p>Terima kasih atas kerja sama Anda.</p>
+            <p>Hormat kami,<br><strong>Platinum Komputer</strong></p>
+        ";
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("PHPMailer Error (send_contract_uploaded_email_to_supplier): " . $e->getMessage());
+        return false;
+    }
+}
+
+// Email ke Admin: Barang Dikirim oleh Supplier
+function send_order_shipment_email_to_admin($adminEmail, $orderNo, $adminAddress, $receivingWarehouse, $paymentType, $paymentDueDate, $totalOrderPrice, $paymentTermsDescription) {
+    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) {
+        error_log("Email Error: Autoload atau SMTP_HOST tidak ditemukan.");
+        return false;
+    }
+    require_once __DIR__ . '/../vendor/autoload.php';
+
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SMTP_USERNAME;
+        $mail->Password = SMTP_PASSWORD;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port = SMTP_PORT;
+
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addAddress($adminEmail, 'Admin Platinum Komputer');
+        $mail->isHTML(true);
+        $mail->Subject = 'Barang Pesanan Anda Telah Dikirim! - No: ' . $orderNo;
+
+        $payment_method_info = '';
+        if (strtolower($paymentType) === 'tunai') {
+            $payment_method_info = "Pembayaran akan dilakukan secara <strong>Tunai</strong> kepada kurir saat barang diterima.";
+        } else { // Kredit/Transfer
+            $payment_method_info = "Pembayaran via transfer dengan nominal <strong>" . formatRupiah($totalOrderPrice) . "</strong>. <br>Ketentuan: " . nl2br(htmlspecialchars($paymentTermsDescription));
+            if ($paymentDueDate) {
+                $payment_method_info .= "<br>Wajib dibayarkan paling lambat tanggal: <strong>" . formatTanggal($paymentDueDate) . "</strong>.";
+            }
+        }
+
+        $mail->Body    = "
+            <h3>Halo Admin,</h3>
+            <p>Barang untuk pesanan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah dikirimkan!</p>
+            <p>Barang akan dikirimkan ke alamat: <strong>" . htmlspecialchars($adminAddress) . "</strong>, ke gudang: <strong>" . htmlspecialchars($receivingWarehouse) . "</strong>.</p>
+            <p>Metode pembayaran: " . $payment_method_info . "</p>
+            <p>Mohon segera konfirmasi penerimaan barang setelah barang sampai di tujuan.</p>
+            <p>Terima kasih.</p>
+            <p>Hormat kami,<br><strong>Platinum Komputer</strong></p>
+        ";
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("PHPMailer Error (send_order_shipment_email_to_admin): " . $e->getMessage());
+        return false;
+    }
+}
+
+// Email ke Supplier: Barang Sudah Diterima Admin
+function send_order_received_email_to_supplier($supplierEmail, $supplierCompanyName, $orderNo, $adminName) {
+    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) {
+        error_log("Email Error: Autoload atau SMTP_HOST tidak ditemukan.");
+        return false;
+    }
+    require_once __DIR__ . '/../vendor/autoload.php';
+
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SMTP_USERNAME;
+        $mail->Password = SMTP_PASSWORD;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port = SMTP_PORT;
+
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addAddress($supplierEmail, $supplierCompanyName);
+        $mail->isHTML(true);
+        $mail->Subject = 'Barang Pesanan Telah Diterima Admin! - No: ' . $orderNo;
+        $mail->Body    = "
+            <h3>Yth. Tim " . htmlspecialchars($supplierCompanyName) . ",</h3>
+            <p>Kami ingin memberitahukan bahwa barang untuk pesanan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah berhasil diterima oleh Admin <strong>" . htmlspecialchars($adminName) . "</strong>.</p>
+            <p>Status pesanan Anda kini telah berubah menjadi <b>Selesai</b>.</p>
+            <p>Terima kasih atas pengiriman yang cepat dan kerja sama Anda.</p>
+            <p>Hormat kami,<br><strong>Platinum Komputer</strong></p>
+        ";
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("PHPMailer Error (send_order_received_email_to_supplier): " . $e->getMessage());
         return false;
     }
 }

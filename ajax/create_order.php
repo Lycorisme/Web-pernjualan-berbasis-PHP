@@ -7,6 +7,10 @@ header('Content-Type: application/json');
 // Memulai output buffering untuk menangkap semua output tak terduga (termasuk error)
 ob_start();
 
+// --- TEMPORARY: Sembunyikan semua error untuk memastikan output JSON bersih ---
+error_reporting(0);
+ini_set('display_errors', 0);
+
 // Memuat file-file inti
 require_once __DIR__ . '/../config/koneksi.php';
 require_once __DIR__ . '/../functions/helper.php';
@@ -77,7 +81,7 @@ try {
         throw new Exception("Gagal mendapatkan ID pesanan baru.");
     }
 
-    // Siapkan statement untuk menyimpan detail pesanan dan mengupdate stok supplier
+    // Siapkan statement untuk menyimpan detail pesanan
     $stmt_order_item = $koneksi->prepare(
         "INSERT INTO order_items (order_id, barang_id_supplier_original, kode_barang, nama_barang, quantity, price_per_item, subtotal_item_price) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
@@ -85,21 +89,7 @@ try {
         throw new Exception("Gagal mempersiapkan query detail pesanan: " . $koneksi->error);
     }
     
-    $stmt_update_supplier_stok = $koneksi->prepare(
-        "UPDATE barang SET stok = stok - ? WHERE id = ?"
-    );
-    if ($stmt_update_supplier_stok === false) {
-        throw new Exception("Gagal mempersiapkan query update stok supplier: " . $koneksi->error);
-    }
-
-    $stmt_check_supplier_stok = $koneksi->prepare(
-        "SELECT stok, nama_barang FROM barang WHERE id = ? AND supplier_id = ?"
-    );
-    if ($stmt_check_supplier_stok === false) {
-        throw new Exception("Gagal mempersiapkan query check stok supplier: " . $koneksi->error);
-    }
-
-    // 2. Loop setiap barang di keranjang untuk disimpan ke 'order_items' dan mengurangi stok supplier
+    // 2. Loop setiap barang di keranjang untuk disimpan ke 'order_items'
     foreach ($data['items'] as $item) {
         // Casting eksplisit untuk memastikan tipe data
         $barang_id_supplier_original = (int)$item['barang_id_supplier_original'];
@@ -111,24 +101,6 @@ try {
 
         // --- LOGGING ITEM YANG SEDANG DIPROSES ---
         error_log("DEBUG create_order.php - Memproses item: ID {$barang_id_supplier_original}, Kode {$kode_barang}, Qty {$quantity}");
-
-        // Validasi stok supplier sebelum mengurangi
-        $stmt_check_supplier_stok->bind_param("ii", $barang_id_supplier_original, $data['supplier_id']);
-        $stmt_check_supplier_stok->execute();
-        $stok_result = $stmt_check_supplier_stok->get_result();
-        
-        if ($stok_result->num_rows === 0) {
-            throw new Exception("Barang dengan ID {$barang_id_supplier_original} tidak ditemukan pada supplier ini.");
-        }
-        
-        $supplier_barang_data = $stok_result->fetch_assoc();
-        
-        // --- LOGGING STOK AWAL SUPPLIER ---
-        error_log("DEBUG create_order.php - Stok awal supplier untuk {$supplier_barang_data['nama_barang']} (ID: {$barang_id_supplier_original}): {$supplier_barang_data['stok']}");
-
-        if ($supplier_barang_data['stok'] < $quantity) {
-            throw new Exception("Stok barang '{$supplier_barang_data['nama_barang']}' tidak mencukupi. Stok tersedia: {$supplier_barang_data['stok']}, diminta: {$quantity}");
-        }
 
         // Simpan ke 'order_items'
         $stmt_order_item->bind_param(
@@ -144,20 +116,6 @@ try {
         if (!$stmt_order_item->execute()) {
             throw new Exception("Gagal menyimpan detail pesanan untuk barang '{$nama_barang}': " . $stmt_order_item->error);
         }
-
-        // Kurangi stok supplier di tabel 'barang'
-        $stmt_update_supplier_stok->bind_param(
-            "ii",
-            $quantity,
-            $barang_id_supplier_original
-        );
-        if (!$stmt_update_supplier_stok->execute()) {
-            throw new Exception("Gagal mengurangi stok supplier untuk barang '{$nama_barang}': " . $stmt_update_supplier_stok->error);
-        }
-
-        // --- LOGGING STOK AKHIR SUPPLIER (opsional, bisa re-fetch stok seperti di save_purchase.php sebelumnya) ---
-        // Untuk tujuan debugging ini, log langsung dari operasi update
-        error_log("DEBUG create_order.php - Stok supplier untuk {$supplier_barang_data['nama_barang']} (ID: {$barang_id_supplier_original}) berhasil dikurangi sebesar {$quantity}.");
     }
     
     // Kirim email notifikasi ke supplier
@@ -186,9 +144,6 @@ try {
 // Tutup statement dan koneksi
 if (isset($stmt_order) && $stmt_order) $stmt_order->close();
 if (isset($stmt_order_item) && $stmt_order_item) $stmt_order_item->close();
-if (isset($stmt_update_supplier_stok) && $stmt_update_supplier_stok) $stmt_update_supplier_stok->close();
-if (isset($stmt_check_supplier_stok) && $stmt_check_supplier_stok) $stmt_check_supplier_stok->close();
 $koneksi->close();
 
 exit();
-?>

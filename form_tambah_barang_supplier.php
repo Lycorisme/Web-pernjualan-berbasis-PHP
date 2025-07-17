@@ -28,7 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $satuan_id = (int)$_POST['satuan_id'];
     
     $harga_dari_supplier = (float)preg_replace("/[^0-9]/", "", $_POST['harga_dari_supplier']);
-    $stok = (int)$_POST['stok'];
+    // Stok tidak lagi diambil dari input supplier, akan diset default 0 atau diabaikan
+    // $stok = (int)$_POST['stok']; 
     
     $errors = [];
     if (empty($kode_barang)) $errors[] = "Kode barang tidak boleh kosong.";
@@ -59,12 +60,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        // Query INSERT sekarang akan menggunakan kode_barang yang sudah divalidasi keunikannya secara global
+        // Query INSERT sekarang tidak lagi menyertakan stok dari input supplier
+        // Stok diset 0 secara default untuk barang supplier
+        $stok_default = 0; 
         $stmt = $koneksi->prepare(
             "INSERT INTO barang (kode_barang, nama_barang, kategori_id, satuan_id, harga_beli, harga_jual, stok, supplier_id, foto_produk) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
-        $stmt->bind_param("ssiiddiis", $kode_barang, $nama_barang, $kategori_id, $satuan_id, $harga_dari_supplier, $harga_dari_supplier, $stok, $supplier_id, $foto_produk_nama);
+        $stmt->bind_param("ssiiddiis", $kode_barang, $nama_barang, $kategori_id, $satuan_id, $harga_dari_supplier, $harga_dari_supplier, $stok_default, $supplier_id, $foto_produk_nama);
         
         if ($stmt->execute()) {
             setAlert('success', "Barang baru berhasil ditambahkan.");
@@ -139,11 +142,7 @@ require_once __DIR__ . '/template/header.php';
                         </div>
                     </div>
 
-                    <div class="row mb-3">
-                        <label for="stok" class="col-sm-3 col-form-label">Stok yang Anda Sediakan</label>
-                        <div class="col-sm-9"><input type="number" class="form-control" id="stok" name="stok" value="0" min="0" required></div>
-                    </div>
-
+                    <?php /* Baris untuk input stok telah dihapus */ ?>
                     <div class="row mb-3">
                         <label for="foto_produk" class="col-sm-3 col-form-label">Foto Produk</label>
                         <div class="col-sm-9">

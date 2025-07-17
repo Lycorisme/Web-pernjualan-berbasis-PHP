@@ -37,8 +37,10 @@ $tanggal_pesan = date('Y-m-d');
 require_once __DIR__ . '/template/header.php';
 ?>
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- Perbaikan: Memuat SweetAlert2 CSS dan JS dengan benar -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+
 <style>
     /* CSS tambahan untuk offcanvas dan tabel */
     .offcanvas-body {
@@ -136,6 +138,7 @@ require_once __DIR__ . '/template/header.php';
                     </div>
                 </div>
                 
+                <!-- Informasi Pembeli dan Gudang Penerima -->
                 <div class="card shadow-sm">
                     <div class="card-header bg-secondary text-white">
                         <h6 class="m-0">Informasi Pembeli & Pengiriman</h6>
@@ -205,6 +208,7 @@ require_once __DIR__ . '/template/header.php';
     </div>
 </div>
 
+<!-- Offcanvas for Supplier Products -->
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasSupplierProducts" aria-labelledby="offcanvasSupplierProductsLabel">
     <div class="offcanvas-header">
         <h5 id="offcanvasSupplierProductsLabel">Barang dari <?= $nama_supplier_perusahaan ?></h5>
@@ -216,6 +220,7 @@ require_once __DIR__ . '/template/header.php';
             <button class="btn btn-primary" type="button" id="btn-offcanvas-search"><i class="fas fa-search"></i></button>
         </div>
         <div class="order-item-list" id="offcanvas-product-list">
+            <!-- Product items will be loaded here dynamically -->
             <p class="text-center text-muted">Memuat barang...</p>
         </div>
         <div class="d-grid gap-2 mt-3">
@@ -227,6 +232,7 @@ require_once __DIR__ . '/template/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('lihat_barang_supplier.php script loaded.'); // Debugging: Pastikan skrip ini dimuat
     let orderCart = []; // The new cart for order items
     const supplierId = <?= $supplier_id ?>;
     const adminId = <?= $admin_id ?>;
@@ -344,12 +350,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- EVENT LISTENERS ---
     const offcanvasElement = document.getElementById('offcanvasSupplierProducts');
-    offcanvasElement.addEventListener('show.bs.offcanvas', () => loadSupplierProducts());
-    offcanvasElement.addEventListener('hidden.bs.offcanvas', () => {
-        // Clear search and reload products if needed when offcanvas is closed
-        offcanvasSearchInput.value = '';
-        loadSupplierProducts(); // Reload to reflect any changes
+    // Debugging: Pastikan event listener terpasang
+    offcanvasElement.addEventListener('show.bs.offcanvas', () => {
+        console.log('Offcanvas "Pilih Barang Supplier" is about to be shown.');
+        loadSupplierProducts();
     });
+    offcanvasElement.addEventListener('hidden.bs.offcanvas', () => {
+        console.log('Offcanvas "Pilih Barang Supplier" is hidden.');
+        offcanvasSearchInput.value = '';
+        loadSupplierProducts(); 
+    });
+
+    // Debugging: Pastikan tombol terdeteksi dan event listener terpasang
+    const btnPilihBarangSupplier = document.querySelector('button[data-bs-target="#offcanvasSupplierProducts"]');
+    if (btnPilihBarangSupplier) {
+        console.log('Tombol "Pilih Barang Supplier" ditemukan.');
+        // Event listener sudah ada melalui data-bs-toggle="offcanvas"
+    } else {
+        console.error('Tombol "Pilih Barang Supplier" TIDAK ditemukan!');
+    }
+
 
     btnOffcanvasSearch.addEventListener('click', () => loadSupplierProducts(offcanvasSearchInput.value));
     offcanvasSearchInput.addEventListener('keyup', (e) => {
@@ -363,21 +383,24 @@ document.addEventListener('DOMContentLoaded', function() {
             const existingItem = orderCart.find(item => item.barang_id_supplier_original === product.id);
 
             if (!existingItem) {
-                // PERUBAHAN: Hapus validasi stok di sini
-                // Stok akan dikelola oleh supplier saat konfirmasi pesanan
                 orderCart.push({
                     barang_id_supplier_original: product.id,
                     kode_barang: product.kode_barang,
                     nama_barang: product.nama_barang,
                     price_per_item: parseFloat(product.harga_beli), // Harga beli dari supplier
                     quantity: 1, // Default quantity
-                    // PERUBAHAN: Hapus stock_supplier dari objek keranjang
                 });
                 checkbox.disabled = true; // Disable once added
             }
         });
         updateOrderCartDisplay();
-        bootstrap.Offcanvas.getInstance(offcanvasElement).hide(); // Hide offcanvas after adding
+        // Pastikan offcanvas ditutup dengan benar
+        const offcanvasInstance = bootstrap.Offcanvas.getInstance(offcanvasElement);
+        if (offcanvasInstance) {
+            offcanvasInstance.hide();
+        } else {
+            console.error('Offcanvas instance not found for closing.');
+        }
     });
 
     orderCartTableBody.addEventListener('click', function(e) {
@@ -390,7 +413,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const qtyInput = this.querySelector(`input[data-index="${index}"]`);
 
         if (target.classList.contains('btn-increase-qty')) {
-            item.quantity++; // Tidak ada lagi batasan stok di frontend
+            item.quantity++; 
         } else if (target.classList.contains('btn-decrease-qty')) {
             if (item.quantity > 1) {
                 item.quantity--;
@@ -410,7 +433,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     loadSupplierProducts(); // Reload offcanvas to re-enable checkbox
                 }
             });
-            return; // Exit to avoid double updateDisplay
+            return; 
         }
         updateOrderCartDisplay();
     });
@@ -421,7 +444,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const index = target.dataset.index;
             const newQty = parseInt(target.value);
             
-            // PERUBAHAN: Hapus validasi maxStock di sini
             if (isNaN(newQty) || newQty < 1) {
                 orderCart[index].quantity = 1;
             } else {
@@ -449,10 +471,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // PERUBAHAN: Hapus validasi stok akhir ini dari frontend.
-        // Validasi stok akan dilakukan di backend (ajax/create_order.php)
-        // karena stok bisa berubah antara pemilihan dan pembuatan pesanan.
-
         const orderData = {
             order_no: orderNoInput.value,
             order_date: orderDateInput.value,
@@ -511,3 +529,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateOrderCartDisplay(); // Initial display
 });
 </script>
+
+<?php
+require_once __DIR__ . '/template/footer.php';
+?>
