@@ -1,0 +1,6 @@
+[2025-07-17 15:38:32] PHPMailer Error (send_order_accepted_email): Invalid address:  (to): 
+[2025-07-17 16:06:03] PHPMailer Error (send_order_accepted_email): Invalid address:  (to): 
+[2025-07-17 16:06:19] PHPMailer Error (send_order_accepted_email): Invalid address:  (to): 
+[2025-07-17 16:11:05] PHPMailer Error (send_order_accepted_email): Invalid address:  (to): 
+[2025-07-17 16:13:25] PHPMailer Error (send_order_accepted_email): Invalid address:  (to): 
+[2025-07-17 16:27:46] PHPMailer Error (send_order_accepted_email): Invalid address:  (to): 

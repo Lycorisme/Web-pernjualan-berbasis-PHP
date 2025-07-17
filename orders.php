@@ -15,13 +15,15 @@ $orders = [];
 $query = "";
 $stmt = null;
 
+// Mengambil data untuk admin
 if ($role === 'admin') {
+    // ---- QUERY UNTUK ADMIN (DIPERBAIKI) ----
     $query = "
         SELECT 
             o.order_id, o.order_no, o.order_date, o.total_order_price, o.order_status,
             s.nama_perusahaan AS supplier_name, s.email AS supplier_email, s.nama_supplier AS supplier_pic_name, s.telepon AS supplier_contact,
             u.nama_lengkap AS admin_name, u.email AS admin_email, u.alamat AS admin_address, u.telepon AS admin_contact,
-            o.payment_type, o.buyer_name, o.buyer_address, o.buyer_contact, o.receiving_warehouse,
+            o.payment_type, o.buyer_name, o.buyer_address, o.buyer_contact,
             oc.payment_terms_description, oc.payment_due_date, oc.admin_contract_file_path
         FROM orders o
         JOIN supplier s ON o.supplier_id = s.id
@@ -35,13 +37,15 @@ if ($role === 'admin') {
             $orders[] = $row;
         }
     }
+// Mengambil data untuk supplier
 } elseif ($role === 'supplier') {
+    // ---- QUERY UNTUK SUPPLIER (DIPERBAIKI) ----
     $query = "
         SELECT 
             o.order_id, o.order_no, o.order_date, o.total_order_price, o.order_status,
             s.nama_perusahaan AS supplier_name, s.email AS supplier_email, s.nama_supplier AS supplier_pic_name, s.telepon AS supplier_contact,
             u.nama_lengkap AS admin_name, u.email AS admin_email, u.alamat AS admin_address, u.telepon AS admin_contact,
-            o.payment_type, o.buyer_name, o.buyer_address, o.buyer_contact, o.receiving_warehouse,
+            o.payment_type, o.buyer_name, o.buyer_address, o.buyer_contact,
             oc.payment_terms_description, oc.payment_due_date, oc.admin_contract_file_path
         FROM orders o
         JOIN supplier s ON o.supplier_id = s.id
@@ -119,20 +123,14 @@ require_once __DIR__ . '/template/header.php';
                                     </button>
                                     <button class="btn btn-sm btn-danger btn-reject-order" 
                                             data-order-id="<?= $order['order_id'] ?>" 
-                                            data-order-no="<?= htmlspecialchars($order['order_no']) ?>" 
-                                            data-admin-email="<?= htmlspecialchars($order['admin_email']) ?>" 
-                                            data-supplier-company-name="<?= htmlspecialchars($order['supplier_name']) ?>">
+                                            data-order-no="<?= htmlspecialchars($order['order_no']) ?>">
                                         <i class="fas fa-times"></i> Tolak
                                     </button>
                                 <?php endif; ?>
                                 <?php if ($role === 'admin' && $order['order_status'] === 'Diterima Supplier'): ?>
-                                    <?php if ($order['payment_type'] === 'tunai'): ?>
-                                        <button class="btn btn-sm btn-primary btn-upload-contract" data-order-id="<?= $order['order_id'] ?>" data-order-no="<?= htmlspecialchars($order['order_no']) ?>">
-                                            <i class="fas fa-upload"></i> Upload Kontrak
-                                        </button>
-                                    <?php else: // Jika kredit, admin menunggu pembayaran, tidak ada upload kontrak di sini ?>
-                                        <span class="badge bg-secondary">Menunggu Pembayaran</span>
-                                    <?php endif; ?>
+                                    <button class="btn btn-sm btn-primary btn-upload-contract" data-order-id="<?= $order['order_id'] ?>" data-order-no="<?= htmlspecialchars($order['order_no']) ?>">
+                                        <i class="fas fa-upload"></i> Upload Kontrak
+                                    </button>
                                 <?php endif; ?>
                                 <?php if ($role === 'admin' && $order['order_status'] === 'Kontrak Diunggah'): ?>
                                     <a href="generate_contract_pdf.php?order_id=<?= $order['order_id'] ?>" target="_blank" class="btn btn-sm btn-warning">
@@ -142,23 +140,14 @@ require_once __DIR__ . '/template/header.php';
                                 <?php if ($role === 'supplier' && ($order['order_status'] === 'Kontrak Diunggah' || $order['order_status'] === 'Menunggu Pembayaran' || $order['order_status'] === 'Lunas')): ?>
                                     <button class="btn btn-sm btn-success btn-confirm-shipment" 
                                             data-order-id="<?= $order['order_id'] ?>"
-                                            data-order-no="<?= htmlspecialchars($order['order_no']) ?>"
-                                            data-admin-email="<?= htmlspecialchars($order['admin_email']) ?>"
-                                            data-admin-address="<?= htmlspecialchars($order['buyer_address']) ?>"
-                                            data-receiving-warehouse="<?= htmlspecialchars($order['receiving_warehouse']) ?>"
-                                            data-payment-type="<?= htmlspecialchars($order['payment_type']) ?>"
-                                            data-total-order-price="<?= htmlspecialchars($order['total_order_price']) ?>"
-                                            data-payment-terms-description="<?= htmlspecialchars($order['payment_terms_description'] ?? '') ?>"
-                                            data-payment-due-date="<?= htmlspecialchars($order['payment_due_date'] ?? '') ?>">
+                                            data-order-no="<?= htmlspecialchars($order['order_no']) ?>">
                                         <i class="fas fa-truck"></i> Konfirmasi Kirim
                                     </button>
                                 <?php endif; ?>
                                 <?php if ($role === 'admin' && $order['order_status'] === 'Di Antar'): ?>
                                     <button class="btn btn-sm btn-success btn-confirm-receipt" 
                                             data-order-id="<?= $order['order_id'] ?>"
-                                            data-order-no="<?= htmlspecialchars($order['order_no']) ?>"
-                                            data-supplier-company-name="<?= htmlspecialchars($order['supplier_name']) ?>"
-                                            data-supplier-email="<?= htmlspecialchars($order['supplier_email']) ?>">
+                                            data-order-no="<?= htmlspecialchars($order['order_no']) ?>">
                                         <i class="fas fa-box-open"></i> Konfirmasi Terima
                                     </button>
                                 <?php endif; ?>
@@ -188,23 +177,22 @@ require_once __DIR__ . '/template/header.php';
                     <div class="col-md-6">
                         <h6>Informasi Pesanan</h6>
                         <dl class="row">
-                            <dt class="col-sm-4">No. Pesanan</dt><dd class="col-sm-8" id="detail-order-no-val"></dd>
-                            <dt class="col-sm-4">Tanggal</dt><dd class="col-sm-8" id="detail-order-date-val"></dd>
-                            <dt class="col-sm-4">Supplier</dt><dd class="col-sm-8" id="detail-supplier-name-val"></dd>
-                            <dt class="col-sm-4">Admin Pemesan</dt><dd class="col-sm-8" id="detail-admin-name-val"></dd>
-                            <dt class="col-sm-4">Total Harga</dt><dd class="col-sm-8" id="detail-total-price-val"></dd>
-                            <dt class="col-sm-4">Status</dt><dd class="col-sm-8" id="detail-order-status-val"></dd>
-                            <dt class="col-sm-4">Jenis Pembayaran</dt><dd class="col-sm-8" id="detail-payment-type-val"></dd>
+                            <dt class="col-sm-5">No. Pesanan</dt><dd class="col-sm-7" id="detail-order-no-val"></dd>
+                            <dt class="col-sm-5">Tanggal</dt><dd class="col-sm-7" id="detail-order-date-val"></dd>
+                            <dt class="col-sm-5">Supplier</dt><dd class="col-sm-7" id="detail-supplier-name-val"></dd>
+                            <dt class="col-sm-5">Admin Pemesan</dt><dd class="col-sm-7" id="detail-admin-name-val"></dd>
+                            <dt class="col-sm-5">Total Harga</dt><dd class="col-sm-7" id="detail-total-price-val"></dd>
+                            <dt class="col-sm-5">Status</dt><dd class="col-sm-7" id="detail-order-status-val"></dd>
+                            <dt class="col-sm-5">Jenis Pembayaran</dt><dd class="col-sm-7" id="detail-payment-type-val"></dd>
                         </dl>
                     </div>
                     <div class="col-md-6">
                         <h6>Informasi Pembeli & Pengiriman</h6>
                         <dl class="row">
-                            <dt class="col-sm-4">Nama Pembeli</dt><dd class="col-sm-8" id="detail-buyer-name-val"></dd>
-                            <dt class="col-sm-4">Alamat Pembeli</dt><dd class="col-sm-8" id="detail-buyer-address-val"></dd>
-                            <dt class="col-sm-4">Kontak Pembeli</dt><dd class="col-sm-8" id="detail-buyer-contact-val"></dd>
-                            <dt class="col-sm-4">Gudang Penerima</dt><dd class="col-sm-8" id="detail-receiving-warehouse-val"></dd>
-                        </dl>
+                            <dt class="col-sm-5">Nama Pembeli</dt><dd class="col-sm-7" id="detail-buyer-name-val"></dd>
+                            <dt class="col-sm-5">Alamat Pembeli</dt><dd class="col-sm-7" id="detail-buyer-address-val"></dd>
+                            <dt class="col-sm-5">Kontak Pembeli</dt><dd class="col-sm-7" id="detail-buyer-contact-val"></dd>
+                            </dl>
                     </div>
                 </div>
                 <h6>Item Pesanan</h6>
@@ -242,10 +230,7 @@ require_once __DIR__ . '/template/header.php';
                 <div class="modal-body">
                     <input type="hidden" id="delivery-order-id" name="order_id">
                     <input type="hidden" id="delivery-payment-type" name="payment_type">
-                    <input type="hidden" id="delivery-admin-email" name="admin_email">
-                    <input type="hidden" id="delivery-order-no" name="order_no">
-                    <input type="hidden" id="delivery-supplier-company-name" name="supplier_company_name">
-
+                    
                     <div class="mb-3">
                         <label for="supplier-company-name-input" class="form-label">Nama Perusahaan Supplier</label>
                         <input type="text" class="form-control" id="supplier-company-name-input" name="supplier_company_name_contract" required>
@@ -264,7 +249,7 @@ require_once __DIR__ . '/template/header.php';
                     </div>
                     <div class="mb-3">
                         <label for="amount-to-pay-input" class="form-label">Jumlah yang Harus Dibayar</label>
-                        <input type="text" class="form-control currency" id="amount-to-pay-input" name="amount_to_pay" readonly>
+                        <input type="text" class="form-control" id="amount-to-pay-input" name="amount_to_pay" readonly>
                     </div>
                     <div class="mb-3">
                         <label for="payment-terms-input" class="form-label">Ketentuan Pembayaran</label>
@@ -293,7 +278,7 @@ require_once __DIR__ . '/template/header.php';
                     <div class="mb-3">
                         <label for="contract-file" class="form-label">Pilih File Kontrak (PDF/Gambar)</label>
                         <input class="form-control" type="file" id="contract-file" name="contract_file" accept=".pdf,image/*" required>
-                        <small class="form-text text-muted">Hanya file PDF atau gambar (JPG, PNG, GIF). Maksimal 5MB.</small>
+                        <small class="form-text text-muted">Hanya file PDF atau gambar (JPG, PNG). Maksimal 5MB.</small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -311,65 +296,32 @@ document.addEventListener('DOMContentLoaded', function() {
     const orderDetailModal = new bootstrap.Modal(document.getElementById('orderDetailModal'));
     const deliveryDetailsModal = new bootstrap.Modal(document.getElementById('deliveryDetailsModal'));
     const uploadContractModal = new bootstrap.Modal(document.getElementById('uploadContractModal'));
-    const role = "<?= $role ?>";
-    // FIX: Menghapus baris const adminEmail yang tidak digunakan.
     
-    // Fungsi untuk memformat angka sebagai Rupiah
     function formatRupiah(angka) {
-        if (!angka) return "Rp 0";
-        return "Rp " + number_format((parseFloat(angka) || 0), 0, ',', '.');
+        return "Rp " + (new Intl.NumberFormat('id-ID').format(angka || 0));
     }
 
-    // Fungsi untuk memformat angka dengan pemisah ribuan
-    function number_format(number, decimals, decPoint, thousandsSep) {
-        number = (number + '').replace(/[^0-9+\-Ee.]/g, '');
-        var n = !isFinite(+number) ? 0 : +number,
-            prec = !isFinite(+decimals) ? 0 : Math.abs(decimals),
-            sep = (typeof thousandsSep === 'undefined') ? '.' : thousandsSep,
-            dec = (typeof decPoint === 'undefined') ? ',' : decPoint,
-            s = '',
-            toFixedFix = function(n, prec) {
-                var k = Math.pow(10, prec);
-                return '' + Math.round(n * k) / k;
-            };
-
-        s = (prec ? toFixedFix(n, prec) : '' + Math.round(n)).split('.');
-        if (s[0].length > 3) {
-            s[0] = s[0].replace(/\B(?=(?:\d{3})+(?!\d))/g, sep);
-        }
-        if ((s[1] || '').length < prec) {
-            s[1] = s[1] || '';
-            s[1] += new Array(prec - s[1].length + 1).join('0');
-        }
-        return s.join(dec);
-    }
-
-    // Fungsi untuk mengubah format Rupiah kembali ke angka
     function parseRupiah(rupiah) {
-        if (!rupiah) return 0;
-        return parseInt(String(rupiah).replace(/[^0-9,-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+        return parseInt(String(rupiah).replace(/[^0-9]/g, '')) || 0;
     }
 
-    // Event listener untuk tombol Detail
     document.querySelectorAll('.btn-detail-order').forEach(button => {
         button.addEventListener('click', async function() {
             const orderData = JSON.parse(this.dataset.order);
             
+            // Mengisi data modal detail
             document.getElementById('detail-order-no').textContent = orderData.order_no;
             document.getElementById('detail-order-no-val').textContent = orderData.order_no;
             document.getElementById('detail-order-date-val').textContent = new Date(orderData.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
             document.getElementById('detail-supplier-name-val').textContent = orderData.supplier_name;
             document.getElementById('detail-admin-name-val').textContent = orderData.admin_name;
             document.getElementById('detail-total-price-val').textContent = formatRupiah(orderData.total_order_price);
-            
-            const statusBadge = createStatusBadge(orderData.order_status);
-            document.getElementById('detail-order-status-val').innerHTML = statusBadge;
-            
+            document.getElementById('detail-order-status-val').innerHTML = `<?= buatBadgeStatus('STATUS_PLACEHOLDER') ?>`.replace('STATUS_PLACEHOLDER', orderData.order_status);
             document.getElementById('detail-payment-type-val').textContent = orderData.payment_type;
             document.getElementById('detail-buyer-name-val').textContent = orderData.buyer_name;
             document.getElementById('detail-buyer-address-val').textContent = orderData.buyer_address;
             document.getElementById('detail-buyer-contact-val').textContent = orderData.buyer_contact;
-            document.getElementById('detail-receiving-warehouse-val').textContent = orderData.receiving_warehouse;
+            // Baris untuk mengisi info gudang Dihapus dari sini
 
             const orderItemsBody = document.getElementById('detail-order-items');
             orderItemsBody.innerHTML = '<tr><td colspan="5" class="text-center"><i class="fas fa-spinner fa-spin"></i> Memuat item...</td></tr>';
@@ -379,11 +331,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 const result = await response.json();
                 
                 if (!result.success) throw new Error(result.message);
-                const items = result.items;
 
                 orderItemsBody.innerHTML = '';
-                if (items.length > 0) {
-                    items.forEach(item => {
+                if (result.items.length > 0) {
+                    result.items.forEach(item => {
                         const row = `
                             <tr>
                                 <td>${item.kode_barang}</td>
@@ -405,38 +356,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    function createStatusBadge(status) {
-        const statusMap = {
-            'Di Pesan': 'badge bg-warning text-dark',
-            'Diterima Supplier': 'badge bg-info',
-            'Ditolak Supplier': 'badge bg-danger',
-            'Kontrak Diunggah': 'badge bg-primary',
-            'Menunggu Pembayaran': 'badge bg-secondary',
-            'Lunas': 'badge bg-success',
-            'Di Antar': 'badge bg-primary',
-            'Selesai': 'badge bg-success'
-        };
-        const badgeClass = statusMap[status] || 'badge bg-secondary';
-        return `<span class="${badgeClass}">${status}</span>`;
-    }
-
     document.querySelectorAll('.btn-accept-order').forEach(button => {
         button.addEventListener('click', function() {
-            const orderId = this.dataset.orderId;
-            const orderNo = this.dataset.orderNo;
-            const supplierCompanyName = this.dataset.supplierCompanyName;
-            const supplierPicName = this.dataset.supplierPicName;
-            const supplierContact = this.dataset.supplierContact;
-            const totalOrderPrice = this.dataset.totalOrderPrice;
-            const paymentType = this.dataset.paymentType;
-            const adminEmail = this.dataset.adminEmail;
+            const { orderId, orderNo, supplierCompanyName, supplierPicName, supplierContact, totalOrderPrice, paymentType } = this.dataset;
 
             document.getElementById('delivery-order-id').value = orderId;
             document.getElementById('delivery-payment-type').value = paymentType;
-            document.getElementById('delivery-admin-email').value = adminEmail;
-            document.getElementById('delivery-order-no').value = orderNo;
-            document.getElementById('delivery-supplier-company-name').value = supplierCompanyName;
-            
             document.getElementById('supplier-company-name-input').value = supplierCompanyName;
             document.getElementById('supplier-pic-name-input').value = supplierPicName;
             document.getElementById('supplier-contact-input').value = supplierContact;
@@ -464,94 +389,78 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const formData = new FormData(this);
         formData.append('action', 'accept_order');
-        
-        // Convert formatted currency back to number for amount_to_pay
-        const amountToPayInput = document.getElementById('amount-to-pay-input');
-        formData.set('amount_to_pay', parseRupiah(amountToPayInput.value));
+        formData.set('amount_to_pay', parseRupiah(formData.get('amount_to_pay')));
         
         const btnSubmit = document.getElementById('btn-save-delivery-details');
-        const originalText = btnSubmit.textContent;
         btnSubmit.disabled = true;
         btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
 
         try {
-            const response = await fetch('ajax/process_order_actions.php', {
-                method: 'POST',
-                body: formData
-            });
+            const response = await fetch('ajax/process_order_actions.php', { method: 'POST', body: formData });
             const result = await response.json();
             
             if (result.success) {
                 deliveryDetailsModal.hide();
                 Swal.fire('Berhasil', result.message, 'success').then(() => location.reload());
-            } else {
-                throw new Error(result.message);
-            }
+            } else { throw new Error(result.message); }
         } catch (error) {
             Swal.fire('Error', `Gagal menerima pesanan: ${error.message}`, 'error');
         } finally {
             btnSubmit.disabled = false;
-            btnSubmit.textContent = originalText;
+            btnSubmit.textContent = 'Simpan & Konfirmasi Pesanan';
         }
     });
 
-   document.querySelectorAll('.btn-reject-order').forEach(button => {
-       button.addEventListener('click', async function() {
-           const orderId = this.dataset.orderId;
-           const orderNo = this.dataset.orderNo;
-           const adminEmail = this.dataset.adminEmail;
-           const supplierCompanyName = this.dataset.supplierCompanyName;
+    document.querySelectorAll('.btn-reject-order').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.dataset.orderId;
 
-           const result = await Swal.fire({
-               title: 'Tolak Pesanan?',
-               text: `Anda yakin ingin menolak pesanan ${orderNo}?`,
-               icon: 'warning',
-               showCancelButton: true,
-               confirmButtonColor: '#d33',
-               confirmButtonText: 'Ya, Tolak',
-               cancelButtonText: 'Batal'
-           });
+            Swal.fire({
+                title: 'Tolak Pesanan Ini?',
+                text: "Harap berikan alasan penolakan pesanan.",
+                icon: 'warning',
+                input: 'textarea',
+                inputPlaceholder: 'Ketik alasan penolakan di sini...',
+                inputValidator: (value) => !value && 'Anda harus memberikan alasan penolakan!',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Tolak Pesanan',
+                cancelButtonText: 'Batal',
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const rejectionReason = result.value;
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'reject_order');
+                    formData.append('order_id', orderId);
+                    formData.append('rejection_reason', rejectionReason);
 
-           if (!result.isConfirmed) return;
-
-           try {
-               const formData = new FormData();
-               formData.append('action', 'reject_order');
-               formData.append('order_id', orderId);
-               formData.append('admin_email', adminEmail);
-               formData.append('order_no', orderNo);
-               formData.append('supplier_company_name', supplierCompanyName);
-
-               const response = await fetch('ajax/process_order_actions.php', { method: 'POST', body: formData });
-               const result = await response.json();
-               
-               if (result.success) {
-                   Swal.fire('Berhasil', result.message, 'success').then(() => location.reload());
-               } else {
-                   throw new Error(result.message);
-               }
-           } catch (error) {
-               Swal.fire('Error', `Gagal menolak pesanan: ${error.message}`, 'error');
-           }
-       });
-   });
+                    fetch('ajax/process_order_actions.php', { method: 'POST', body: formData })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Berhasil!', data.message, 'success').then(() => location.reload());
+                        } else {
+                            Swal.fire('Gagal', data.message, 'error');
+                        }
+                    })
+                    .catch(() => Swal.fire('Error', 'Terjadi kesalahan saat menghubungi server.', 'error'));
+                }
+            });
+        });
+    });
 
    document.querySelectorAll('.btn-upload-contract').forEach(button => {
        button.addEventListener('click', function() {
-           const orderId = this.dataset.orderId;
-           const orderNo = this.dataset.orderNo;
+           const { orderId, orderNo } = this.dataset;
            document.getElementById('upload-contract-order-id').value = orderId;
            document.getElementById('upload-contract-order-no').textContent = orderNo;
            uploadContractModal.show();
        });
    });
-
+   
    document.getElementById('form-upload-contract').addEventListener('submit', async function(e) {
        e.preventDefault();
-       
        const formData = new FormData(this);
        formData.append('action', 'upload_contract');
-
        const btnSubmit = document.getElementById('btn-submit-contract');
        btnSubmit.disabled = true;
        btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengupload...';
@@ -559,13 +468,10 @@ document.addEventListener('DOMContentLoaded', function() {
        try {
            const response = await fetch('ajax/process_order_actions.php', { method: 'POST', body: formData });
            const result = await response.json();
-           
            if (result.success) {
                uploadContractModal.hide();
                Swal.fire('Berhasil', result.message, 'success').then(() => location.reload());
-           } else {
-               throw new Error(result.message);
-           }
+           } else { throw new Error(result.message); }
        } catch (error) {
            Swal.fire('Error', `Gagal mengupload kontrak: ${error.message}`, 'error');
        } finally {
@@ -576,15 +482,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
    document.querySelectorAll('.btn-confirm-shipment').forEach(button => {
        button.addEventListener('click', async function() {
-           const { orderId, orderNo, adminEmail, adminAddress, receivingWarehouse, paymentType, totalOrderPrice, paymentTermsDescription, paymentDueDate } = this.dataset;
-
+           const { orderId, orderNo } = this.dataset;
            const result = await Swal.fire({
                title: 'Konfirmasi Pengiriman',
                text: `Anda yakin pesanan ${orderNo} sudah dikirim?`,
                icon: 'question',
                showCancelButton: true,
                confirmButtonText: 'Ya, Kirim',
-               cancelButtonText: 'Batal'
            });
 
            if (!result.isConfirmed) return;
@@ -593,39 +497,26 @@ document.addEventListener('DOMContentLoaded', function() {
                const formData = new FormData();
                formData.append('action', 'confirm_shipment');
                formData.append('order_id', orderId);
-               formData.append('admin_email', adminEmail);
-               formData.append('order_no', orderNo);
-               formData.append('admin_address', adminAddress);
-               formData.append('receiving_warehouse', receivingWarehouse);
-               formData.append('payment_type', paymentType);
-               formData.append('total_order_price', totalOrderPrice);
-               formData.append('payment_terms_description', paymentTermsDescription);
-               formData.append('payment_due_date', paymentDueDate);
-
                const response = await fetch('ajax/process_order_actions.php', { method: 'POST', body: formData });
-               const result = await response.json();
-               
-               if (result.success) {
-                   Swal.fire('Berhasil', result.message, 'success').then(() => location.reload());
-               } else {
-                   throw new Error(result.message);
-               }
+               const res = await response.json();
+               if (res.success) {
+                   Swal.fire('Berhasil', res.message, 'success').then(() => location.reload());
+               } else { throw new Error(res.message); }
            } catch (error) {
                Swal.fire('Error', `Gagal konfirmasi pengiriman: ${error.message}`, 'error');
            }
        });
    });
-
+    
    document.querySelectorAll('.btn-confirm-receipt').forEach(button => {
        button.addEventListener('click', async function() {
-           const { orderId, orderNo, supplierCompanyName, supplierEmail } = this.dataset;
+           const { orderId, orderNo } = this.dataset;
            const result = await Swal.fire({
                title: 'Konfirmasi Penerimaan',
-               text: `Anda yakin pesanan ${orderNo} sudah diterima?`,
+               text: `Anda yakin pesanan ${orderNo} sudah diterima? Stok akan diperbarui.`,
                icon: 'question',
                showCancelButton: true,
                confirmButtonText: 'Ya, Diterima',
-               cancelButtonText: 'Batal'
            });
 
            if (!result.isConfirmed) return;
@@ -634,18 +525,11 @@ document.addEventListener('DOMContentLoaded', function() {
                const formData = new FormData();
                formData.append('action', 'confirm_receipt');
                formData.append('order_id', orderId);
-               formData.append('supplier_email', supplierEmail);
-               formData.append('order_no', orderNo);
-               formData.append('supplier_company_name', supplierCompanyName);
-
                const response = await fetch('ajax/process_order_actions.php', { method: 'POST', body: formData });
-               const result = await response.json();
-               
-               if (result.success) {
-                   Swal.fire('Berhasil', result.message, 'success').then(() => location.reload());
-               } else {
-                   throw new Error(result.message);
-               }
+               const res = await response.json();
+               if (res.success) {
+                   Swal.fire('Berhasil', res.message, 'success').then(() => location.reload());
+               } else { throw new Error(res.message); }
            } catch (error) {
                Swal.fire('Error', `Gagal konfirmasi penerimaan: ${error.message}`, 'error');
            }
