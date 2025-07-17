@@ -166,6 +166,30 @@ function generateNoPembelian() {
     return "PMB{$today}{$random}";
 }
 
+// --- NEW FUNCTION for Orders (Phase 2) ---
+function generateOrderNo($prefix = 'ORD') {
+    global $koneksi;
+    $tanggal = date('Ymd');
+    // Cari nomor urut terakhir untuk hari ini dari tabel 'orders'
+    $query = "SELECT MAX(order_no) as max_no FROM orders WHERE order_no LIKE ?";
+    $search_pattern = $prefix . $tanggal . '%';
+    $stmt = $koneksi->prepare($query);
+    $stmt->bind_param("s", $search_pattern);
+    $stmt->execute();
+    $result = $stmt->get_result()->fetch_assoc();
+    $max_no = $result['max_no'];
+    
+    $urutan = 0;
+    if ($max_no) {
+        // Ambil bagian nomor urut dari kode terakhir
+        $parts = explode('-', $max_no);
+        $urutan = (int) substr($max_no, -3); // Ambil 3 digit terakhir
+    }
+    $urutan++;
+    return $prefix . $tanggal . sprintf('%03d', $urutan); // Format 3 digit angka
+}
+// --- END NEW FUNCTION ---
+
 
 function buatBadgeStatus($status) {
     $badge_class = '';
@@ -173,11 +197,17 @@ function buatBadgeStatus($status) {
         case 'Lunas':
         case 'Disetujui':
         case 'Selesai':
+        case 'Diterima Supplier': // NEW Order Status
             $badge_class = 'bg-success';
             break;
         case 'Proses':
         case 'Menunggu Persetujuan':
         case 'Barang Dikirim':
+        case 'Di Pesan':         // NEW Order Status
+        case 'Menunggu Kontrak': // NEW Order Status
+        case 'Kontrak Diunggah': // NEW Order Status
+        case 'Menunggu Pembayaran': // NEW Order Status
+        case 'Di Antar':         // NEW Order Status
             $badge_class = 'bg-info text-dark';
             break;
         case 'Belum Lunas':
@@ -185,6 +215,7 @@ function buatBadgeStatus($status) {
             break;
         case 'Ditolak':
         case 'Dibatalkan':
+        case 'Ditolak Supplier': // NEW Order Status
             $badge_class = 'bg-danger';
             break;
         default:
@@ -294,6 +325,109 @@ function prosesPenerimaanBarangDariPembelian($pembelian_id) {
         $koneksi->rollback();
         error_log("Error prosesPenerimaanBarangDariPembelian: " . $e->getMessage());
         return ['success' => false, 'message' => $e->getMessage()];
+    }
+}
+
+// --- NEW EMAIL FUNCTIONS for Orders (Phase 3) ---
+
+// Fungsi untuk mengirim notifikasi pesanan baru ke supplier
+function send_new_order_email_to_supplier($recipientEmail, $supplierName, $orderNo, $adminName, $totalPrice, $loginLink) {
+    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) return false;
+    require_once __DIR__ . '/../vendor/autoload.php';
+
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SMTP_USERNAME;
+        $mail->Password = SMTP_PASSWORD;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port = SMTP_PORT;
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addAddress($recipientEmail, $supplierName);
+        $mail->isHTML(true);
+        $mail->Subject = 'PESANAN BARU dari Platinum Komputer - No: ' . $orderNo;
+        $mail->Body    = "
+            <h3>Yth. " . htmlspecialchars($supplierName) . ",</h3>
+            <p>Anda menerima pesanan baru dari <strong>Platinum Komputer</strong> dengan detail sebagai berikut:</p>
+            <table style='border-collapse: collapse; width: 100%; border: 1px solid #ddd;'>
+                <tr style='background-color: #f2f2f2;'><td style='padding: 8px; border: 1px solid #ddd; width: 30%;'><strong>No. Pesanan</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>" . htmlspecialchars($orderNo) . "</td></tr>
+                <tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Admin Pemesan</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>" . htmlspecialchars($adminName) . "</td></tr>
+                <tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Total Harga Pesanan</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>" . formatRupiah($totalPrice) . "</td></tr>
+            </table>
+            <br>
+            <p>Mohon segera login ke halaman pesanan di dasbor supplier Anda untuk meninjau dan mengkonfirmasi pesanan ini:</p>
+            <p style='text-align: center;'>
+                <a href='" . htmlspecialchars($loginLink) . "' style='background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>LOGIN KE DASBOR SUPPLIER</a>
+            </p>
+            <p>Terima kasih atas perhatian Anda.</p>
+            <p>Hormat kami,<br><strong>Platinum Komputer</strong></p>
+        ";
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("Error sending new order email to supplier: " . $e->getMessage());
+        return false;
+    }
+}
+
+// Fungsi untuk mengirim notifikasi status pesanan ke admin (accept/reject)
+function send_order_status_update_email_to_admin($adminEmail, $orderNo, $supplierCompanyName, $statusBaru) {
+    if (!file_exists(__DIR__ . '/../vendor/autoload.php') || !defined('SMTP_HOST')) return false;
+    require_once __DIR__ . '/../vendor/autoload.php';
+
+    $mail = new PHPMailer(true);
+    $status_color = '';
+    $subject_text = '';
+    $body_message = '';
+
+    switch ($statusBaru) {
+        case 'Diterima Supplier':
+            $status_color = '#28a745'; // Green
+            $subject_text = 'Pesanan Anda DITERIMA oleh Supplier!';
+            $body_message = "<p>Pesanan Anda dengan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah <b>DITERIMA</b> oleh supplier <strong>" . htmlspecialchars($supplierCompanyName) . "</strong>.</p>
+                             <p>Selanjutnya, supplier akan melengkapi detail serah terima/kontrak.</p>
+                             <p>Mohon pantau halaman Pesanan Anda untuk update berikutnya.</p>";
+            break;
+        case 'Ditolak Supplier':
+            $status_color = '#dc3545'; // Red
+            $subject_text = 'Pesanan Anda DITOLAK oleh Supplier';
+            $body_message = "<p>Dengan menyesal kami memberitahukan bahwa pesanan Anda dengan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah <b>DITOLAK</b> oleh supplier <strong>" . htmlspecialchars($supplierCompanyName) . "</strong>.</p>
+                             <p>Mohon periksa halaman Pesanan Anda atau hubungi supplier untuk informasi lebih lanjut.</p>";
+            break;
+        default:
+            $status_color = '#6c757d'; // Grey
+            $subject_text = 'Update Status Pesanan Anda - No: ' . $orderNo;
+            $body_message = "<p>Pesanan Anda dengan nomor <strong>" . htmlspecialchars($orderNo) . "</strong> telah diperbarui statusnya menjadi: <strong style='color: " . $status_color . ";'>" . htmlspecialchars($statusBaru) . "</strong>.</p>
+                             <p>Mohon periksa halaman Pesanan Anda untuk detail.</p>";
+            break;
+    }
+
+    try {
+        $mail->isSMTP();
+        $mail->Host = SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SMTP_USERNAME;
+        $mail->Password = SMTP_PASSWORD;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port = SMTP_PORT;
+
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addAddress($adminEmail, 'Admin Platinum Komputer');
+        $mail->isHTML(true);
+        $mail->Subject = $subject_text . ' - No: ' . $orderNo;
+        $mail->Body    = "
+            <h3>Halo Admin,</h3>
+            " . $body_message . "
+            <br>
+            <p>Hormat kami,<br><strong>Platinum Komputer</strong></p>
+        ";
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("Error sending order status update email to admin: " . $e->getMessage());
+        return false;
     }
 }
 

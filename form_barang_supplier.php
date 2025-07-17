@@ -6,8 +6,8 @@ require_once __DIR__ . '/functions/helper.php';
 cekSupplier();
 $supplier_id = $_SESSION['supplier_id']; // ID Supplier dideteksi dari sesi login
 
-// Query mengambil data barang milik supplier
-$query_barang = "SELECT b.id, b.kode_barang, b.nama_barang, b.kategori_id, b.satuan_id, b.foto_produk, b.harga_beli, b.harga_jual, k.nama_kategori, s.nama_satuan, b.stok 
+// Query mengambil data barang milik supplier (stok DIHAPUS dari SELECT)
+$query_barang = "SELECT b.id, b.kode_barang, b.nama_barang, b.kategori_id, b.satuan_id, b.foto_produk, b.harga_beli, b.harga_jual, k.nama_kategori, s.nama_satuan 
                  FROM barang b 
                  LEFT JOIN kategori k ON b.kategori_id = k.id 
                  LEFT JOIN satuan s ON b.satuan_id = s.id 
@@ -35,7 +35,7 @@ require_once __DIR__ . '/template/header.php';
         <div class="table-responsive">
             <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
                 <thead class="table-dark">
-                    <tr><th>No</th><th>Foto</th><th>Kode Barang</th><th>Nama Barang</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr>
+                    <tr><th>No</th><th>Foto</th><th>Kode Barang</th><th>Nama Barang</th><th>Kategori</th><th>Harga</th><th>Aksi</th></tr>
                 </thead>
                 <tbody>
                     <?php if ($result->num_rows > 0): $no = 1; while ($row = $result->fetch_assoc()): ?>
@@ -44,7 +44,6 @@ require_once __DIR__ . '/template/header.php';
                         $nama_barang = htmlspecialchars($row['nama_barang'] ?? '');
                         $kode_barang = htmlspecialchars($row['kode_barang'] ?? '');
                         $nama_kategori = htmlspecialchars($row['nama_kategori'] ?? '');
-                        // PERBAIKAN: Mengubah harga menjadi integer untuk menghilangkan ,00
                         $harga_beli = (int)($row['harga_beli'] ?? 0);
                     ?>
                     <tr>
@@ -63,16 +62,25 @@ require_once __DIR__ . '/template/header.php';
                         <td><?= $nama_barang ?></td>
                         <td><?= $nama_kategori ?></td>
                         <td><?= htmlspecialchars(formatRupiah($harga_beli)) ?></td>
-                        <td><span class="badge bg-<?= $row['stok'] <= 0 ? 'danger' : 'success' ?>"><?= $row['stok'] ?></span></td>
                         <td>
                             <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-warning btn-edit-barang" data-id="<?= $row['id'] ?>" data-kode="<?= $kode_barang ?>" data-nama="<?= $nama_barang ?>" data-kategori-id="<?= $row['kategori_id'] ?>" data-satuan-id="<?= $row['satuan_id'] ?>" data-harga="<?= $harga_beli ?>" data-stok="<?= $row['stok'] ?>" data-foto="<?= $foto_produk ?>" title="Edit Barang"><i class="fas fa-edit"></i></button>
+                                <button class="btn btn-outline-warning btn-edit-barang" 
+                                        data-id="<?= $row['id'] ?>" 
+                                        data-kode="<?= $kode_barang ?>" 
+                                        data-nama="<?= $nama_barang ?>" 
+                                        data-kategori-id="<?= $row['kategori_id'] ?>" 
+                                        data-satuan-id="<?= $row['satuan_id'] ?>" 
+                                        data-harga="<?= $harga_beli ?>" 
+                                        data-foto="<?= $foto_produk ?>" 
+                                        title="Edit Barang">
+                                    <i class="fas fa-edit"></i>
+                                </button>
                                 <button class="btn btn-outline-danger btn-hapus-barang" data-id="<?= $row['id'] ?>" data-nama="<?= $nama_barang ?>" title="Hapus Barang"><i class="fas fa-trash"></i></button>
                             </div>
                         </td>
                     </tr>
                     <?php endwhile; else: ?>
-                    <tr><td colspan="8" class="text-center py-3">Anda belum menambahkan barang.</td></tr>
+                    <tr><td colspan="6" class="text-center py-3">Anda belum menambahkan barang.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -83,7 +91,7 @@ require_once __DIR__ . '/template/header.php';
 <div class="modal fade" id="imagePreviewModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Preview Gambar</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><img src="" id="imagePreviewSrc" class="img-fluid"></div></div></div></div>
 <div class="modal fade" id="kategoriModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Kelola Kategori Anda</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><h6>Tambah Kategori Baru</h6><form id="form-tambah-kategori" class="mb-3"><div class="input-group"><input type="text" class="form-control" id="nama-kategori-input" placeholder="Ketik nama kategori baru..." required><button type="submit" class="btn btn-primary">Simpan</button></div></form><hr><h6>Kategori yang Sudah Anda Buat</h6><div class="list-group" id="daftar-kategori-supplier" style="max-height: 300px; overflow-y: auto;"></div></div></div></div></div>
 <div class="modal fade" id="editKategoriModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Edit Nama Kategori</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="form-edit-kategori"><input type="hidden" id="edit-kategori-id"><div class="mb-3"><label for="edit-kategori-nama" class="form-label">Nama Kategori</label><input type="text" class="form-control" id="edit-kategori-nama" required></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-primary" id="btn-update-kategori">Simpan Perubahan</button></div></div></div></div>
-<div class="modal fade" id="editBarangModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Edit Barang</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="form-edit-barang" enctype="multipart/form-data"><input type="hidden" id="edit-barang-id"><div class="row"><div class="col-md-6"><div class="mb-3"><label for="edit-barang-kode" class="form-label">Kode Barang</label><input type="text" class="form-control" id="edit-barang-kode" readonly></div><div class="mb-3"><label for="edit-barang-nama" class="form-label">Nama Barang</label><input type="text" class="form-control" id="edit-barang-nama" required></div><div class="mb-3"><label for="edit-barang-kategori" class="form-label">Kategori</label><select class="form-select" id="edit-barang-kategori" required></select></div><div class="mb-3"><label for="edit-barang-satuan" class="form-label">Satuan</label><select class="form-select" id="edit-barang-satuan" required></select></div><div class="mb-3"><label for="edit-barang-harga" class="form-label">Harga</label><input type="text" class="form-control currency" id="edit-barang-harga" required></div><div class="mb-3"><label for="edit-barang-stok" class="form-label">Stok</label><input type="number" class="form-control" id="edit-barang-stok" min="0" required></div></div><div class="col-md-6"><div class="mb-3"><label class="form-label">Foto Produk Saat Ini</label><div id="edit-barang-foto-preview" class="text-center border rounded p-2" style="min-height: 150px;"></div></div><div class="mb-3"><label for="edit-barang-foto-input" class="form-label">Ganti Foto (Opsional)</label><input type="file" class="form-control" id="edit-barang-foto-input" name="foto_produk" accept="image/*"><small class="form-text text-muted">Pilih file baru jika ingin mengganti foto.</small></div></div></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-primary" id="btn-update-barang">Simpan Perubahan</button></div></div></div></div>
+<div class="modal fade" id="editBarangModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Edit Barang</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="form-edit-barang" enctype="multipart/form-data"><input type="hidden" id="edit-barang-id"><div class="row"><div class="col-md-6"><div class="mb-3"><label for="edit-barang-kode" class="form-label">Kode Barang</label><input type="text" class="form-control" id="edit-barang-kode" readonly></div><div class="mb-3"><label for="edit-barang-nama" class="form-label">Nama Barang</label><input type="text" class="form-control" id="edit-barang-nama" required></div><div class="mb-3"><label for="edit-barang-kategori" class="form-label">Kategori</label><select class="form-select" id="edit-barang-kategori" required></select></div><div class="mb-3"><label for="edit-barang-satuan" class="form-label">Satuan</label><select class="form-select" id="edit-barang-satuan" required></select></div><div class="mb-3"><label for="edit-barang-harga" class="form-label">Harga</label><input type="text" class="form-control currency" id="edit-barang-harga" required></div><div class="mb-3" style="display:none;"><label for="edit-barang-stok" class="form-label">Stok</label><input type="number" class="form-control" id="edit-barang-stok" min="0" value="0" required></div></div><div class="col-md-6"><div class="mb-3"><label class="form-label">Foto Produk Saat Ini</label><div id="edit-barang-foto-preview" class="text-center border rounded p-2" style="min-height: 150px;"></div></div><div class="mb-3"><label for="edit-barang-foto-input" class="form-label">Ganti Foto (Opsional)</label><input type="file" class="form-control" id="edit-barang-foto-input" name="foto_produk" accept="image/*"><small class="form-text text-muted">Pilih file baru jika ingin mengganti foto.</small></div></div></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-primary" id="btn-update-barang">Simpan Perubahan</button></div></div></div></div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -209,7 +217,8 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('edit-barang-id').value = data.id; 
             document.getElementById('edit-barang-kode').value = data.kode; 
             document.getElementById('edit-barang-nama').value = data.nama; 
-            document.getElementById('edit-barang-stok').value = data.stok;
+            // Hapus baris ini dari JavaScript jika tidak lagi ada stok di DB atau tidak relevan
+            // document.getElementById('edit-barang-stok').value = data.stok; 
             const hargaInput = document.getElementById('edit-barang-harga');
             hargaInput.value = data.harga;
             formatInputCurrency(hargaInput);
@@ -252,7 +261,8 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('nama_barang', document.getElementById('edit-barang-nama').value);
         formData.append('kategori_id', document.getElementById('edit-barang-kategori').value);
         formData.append('satuan_id', document.getElementById('edit-barang-satuan').value);
-        formData.append('stok', document.getElementById('edit-barang-stok').value);
+        // Hapus baris ini dari JavaScript jika tidak lagi ada stok di DB atau tidak relevan
+        // formData.append('stok', document.getElementById('edit-barang-stok').value); 
         formData.append('harga', hargaValue);
 
         const fotoInput = document.getElementById('edit-barang-foto-input');

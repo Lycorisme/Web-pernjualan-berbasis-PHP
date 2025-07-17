@@ -25,207 +25,489 @@ if ($result_supplier->num_rows === 0) {
     exit();
 }
 $supplier = $result_supplier->fetch_assoc();
-$nama_supplier = $supplier['nama_supplier'];
-$user_id = $_SESSION['user_id'];
+$nama_supplier_perusahaan = htmlspecialchars($supplier['nama_perusahaan']);
+$admin_id = $_SESSION['user_id'];
+$admin_name = $_SESSION['nama_lengkap']; // Ambil nama admin dari sesi
 
-// Data untuk form pembelian baru
-$no_pembelian = generateNoPembelian();
-$tanggal = date('Y-m-d');
+// Data untuk form pesanan baru (akan diisi di JavaScript)
+$order_no = generateOrderNo(); // Fungsi baru untuk generate no pesanan
+$tanggal_pesan = date('Y-m-d');
 
-// Data untuk tabel riwayat (termasuk kolom status)
-$query_pembelian = "SELECT p.id, p.no_pembelian, p.tanggal, p.total, p.status, u.nama_lengkap as admin FROM pembelian p JOIN users u ON p.user_id = u.id WHERE p.supplier_id = ? ORDER BY p.tanggal DESC, p.id DESC";
-$stmt_pembelian = $koneksi->prepare($query_pembelian);
-$stmt_pembelian->bind_param("i", $supplier_id);
-$stmt_pembelian->execute();
-$riwayat_pembelian = $stmt_pembelian->get_result();
-
+// Memuat header
 require_once __DIR__ . '/template/header.php';
 ?>
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    /* CSS tambahan untuk offcanvas dan tabel */
+    .offcanvas-body {
+        padding: 1rem;
+    }
+    .order-item-list {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #e0e0e0;
+        border-radius: 5px;
+        padding: 5px;
+        background-color: #fcfcfc;
+    }
+    .order-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px dashed #eee;
+    }
+    .order-item:last-child {
+        border-bottom: none;
+    }
+    .order-item-info {
+        flex-grow: 1;
+        padding-left: 10px;
+    }
+    .order-item-controls {
+        display: flex;
+        align-items: center;
+    }
+    .order-item-qty {
+        width: 60px;
+        text-align: center;
+        margin: 0 5px;
+    }
+    .img-checkbox {
+        width: 50px; /* Lebar foto */
+        height: 50px; /* Tinggi foto */
+        object-fit: cover; /* Pastikan gambar proporsional */
+        margin-right: 10px;
+    }
+    .form-check-input.item-checkbox {
+        position: relative;
+        top: -15px; /* Sesuaikan posisi checkbox */
+        left: -5px;
+    }
+</style>
 
-<div class="card table-container mb-4">
-    <div class="card-header bg-primary text-white"><h5 class="mb-0">Buat Pembelian Baru dari: <strong><?= htmlspecialchars($nama_supplier) ?></strong></h5></div>
-    <div class="card-body"><div class="row"><div class="col-lg-8 mb-4 mb-lg-0"><div class="row mb-3"><div class="col-md-6"><label class="form-label">No. Pembelian</label><input type="text" class="form-control" id="no-pembelian" value="<?= htmlspecialchars($no_pembelian) ?>" readonly></div><div class="col-md-6"><label for="tanggal" class="form-label">Tanggal</label><input type="date" class="form-control" id="tanggal" value="<?= htmlspecialchars($tanggal) ?>"></div></div><div class="table-responsive"><table class="table table-bordered table-striped" id="keranjang-table"><thead class="table-dark"><tr><th width="25%">Nama Barang</th><th width="20%">Harga Beli</th><th width="20%">Jumlah</th><th width="25%">Subtotal</th><th width="10%">Aksi</th></tr></thead><tbody><tr id="empty-cart"><td colspan="5" class="text-center py-3">Keranjang masih kosong</td></tr></tbody><tfoot class="table-secondary"><tr><th colspan="3" class="text-end">TOTAL</th><th colspan="2" id="total-amount">Rp 0</th></tr></tfoot></table></div></div><div class="col-lg-4"><div class="card"><div class="card-header bg-success text-white"><h6 class="m-0 font-weight-bold">Ringkasan & Aksi</h6></div><div class="card-body"><div class="mb-3"><label for="total-pembelian" class="form-label">Total Pembelian</label><input type="text" class="form-control bg-light" id="total-pembelian" style="font-size: 1.2rem; font-weight: bold;" readonly></div><div class="d-grid gap-2"><button type="button" class="btn btn-primary btn-lg" id="btn-simpan" disabled><i class="fas fa-save"></i> Simpan Pembelian</button><button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#daftarBarangModal"><i class="fas fa-list"></i> Daftar Barang</button><a href="supplier.php" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kembali</a></div></div></div></div></div></div>
-</div>
+<div class="card shadow mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Buat Pesanan Baru dari: <strong><?= $nama_supplier_perusahaan ?></strong></h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-lg-8 mb-4 mb-lg-0">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">No. Pesanan</label>
+                        <input type="text" class="form-control" id="order-no" value="<?= htmlspecialchars($order_no) ?>" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="order-date" class="form-label">Tanggal Pesan</label>
+                        <input type="date" class="form-control" id="order-date" value="<?= htmlspecialchars($tanggal_pesan) ?>" readonly>
+                    </div>
+                </div>
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="m-0">Keranjang Pesanan</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-striped" id="order-cart-table">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th width="25%">Nama Barang</th>
+                                        <th width="20%">Harga Supplier</th>
+                                        <th width="20%">Jumlah Pesan</th>
+                                        <th width="25%">Subtotal</th>
+                                        <th width="10%">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr id="empty-cart-message">
+                                        <td colspan="5" class="text-center py-3">Keranjang pesanan masih kosong</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot class="table-secondary">
+                                    <tr>
+                                        <th colspan="3" class="text-end">TOTAL</th>
+                                        <th colspan="2" id="total-order-amount">Rp 0</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="m-0">Informasi Pembeli & Pengiriman</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="buyer-name" class="form-label">Nama Admin (Pembeli)</label>
+                            <input type="text" class="form-control" id="buyer-name" value="<?= htmlspecialchars($admin_name) ?>" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="buyer-address" class="form-label">Alamat Admin</label>
+                            <textarea class="form-control" id="buyer-address" rows="3" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="buyer-contact" class="form-label">Kontak Admin</label>
+                            <input type="text" class="form-control" id="buyer-contact" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="receiving-warehouse" class="form-label">Gudang Penerima</label>
+                            <input type="text" class="form-control" id="receiving-warehouse" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Jenis Pembayaran</label>
+                            <div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="payment_type" id="payment-cash" value="tunai" checked>
+                                    <label class="form-check-label" for="payment-cash">Tunai</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="payment_type" id="payment-credit" value="kredit">
+                                    <label class="form-check-label" for="payment-credit">Kredit</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-<div class="card table-container">
-    <div class="card-header"><h5 class="mb-0">Riwayat Pembelian Terdahulu</h5></div>
-    <div class="card-body"><div class="table-responsive"><table class="table table-hover table-striped"><thead class="table-dark"><tr><th>No</th><th>No. Pembelian</th><th>Tanggal</th><th>Total</th><th>Status</th><th>Admin</th><th class="text-center">Aksi</th></tr></thead><tbody>
-    <?php if ($riwayat_pembelian->num_rows > 0): $no = 1; while ($pembelian = $riwayat_pembelian->fetch_assoc()): ?>
-    <tr><td><?= $no++ ?></td><td><?= htmlspecialchars($pembelian['no_pembelian']) ?></td><td><?= htmlspecialchars(formatTanggal($pembelian['tanggal'])) ?></td><td><?= htmlspecialchars(formatRupiah($pembelian['total'])) ?></td><td><?= buatBadgeStatus($pembelian['status']) ?></td><td><?= htmlspecialchars($pembelian['admin']) ?></td><td class="text-center"><div class="btn-group btn-group-sm">
-    <?php if ($pembelian['status'] !== 'Belum Lunas'): ?><button onclick="printNota(<?= $pembelian['id'] ?>)" class="btn btn-secondary" title="Cetak Nota"><i class="fas fa-print"></i></button><?php endif; ?>
-    <?php if ($pembelian['status'] == 'Belum Lunas'): ?><button onclick="bukaModalPembayaran(<?= $pembelian['id'] ?>, '<?= htmlspecialchars($pembelian['no_pembelian']) ?>', '<?= htmlspecialchars(formatRupiah($pembelian['total'])) ?>')" class="btn btn-primary" title="Bayar Sekarang"><i class="fas fa-money-bill-wave"></i></button><?php endif; ?>
-    </div></td></tr>
-    <?php endwhile; else: ?><tr><td colspan="7" class="text-center py-4">Belum ada riwayat pembelian.</td></tr><?php endif; ?>
-    </tbody></table></div></div>
-</div>
-
-<div class="modal fade" id="daftarBarangModal" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="daftarBarangModalLabel">Daftar Barang</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="input-group mb-3"><input type="text" class="form-control" id="modal-search" placeholder="Cari barang..."><button class="btn btn-primary" type="button" id="btn-modal-search"><i class="fas fa-search"></i></button></div><div class="table-responsive" style="max-height: 400px; overflow-y: auto;"><table class="table table-hover" id="table-products"><thead class="table-dark"><tr><th>Foto</th><th>Kode</th><th>Nama</th><th>Harga Beli</th><th>Stok</th><th>Aksi</th></tr></thead><tbody></tbody></table></div></div></div></div></div>
-
-<div class="modal fade" id="pembayaranModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="pembayaranModalLabel">Form Pembayaran</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="form-pembayaran" enctype="multipart/form-data"><input type="hidden" id="pembelian-id-input" name="pembelian_id"><div class="mb-3"><label class="form-label">No. Pembelian</label><input type="text" class="form-control bg-light" id="no-pembelian-display" readonly></div><div class="mb-3"><label class="form-label">Total</label><input type="text" class="form-control bg-light" id="total-pembelian-display" readonly></div><div class="mb-3"><label for="bukti-transfer-input" class="form-label">Unggah Bukti Transfer</label><input class="form-control" type="file" id="bukti-transfer-input" name="bukti_transfer" accept="image/*" required></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-primary" id="btn-kirim-bukti">Kirim Bukti</button></div></div></div></div>
-
-<div class="modal fade" id="imagePreviewModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title">Preview Gambar</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body text-center"><img src="" id="imagePreviewSrc" class="img-fluid" alt="Preview"></div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card shadow">
+                    <div class="card-header bg-success text-white">
+                        <h6 class="m-0 font-weight-bold">Ringkasan Pesanan & Aksi</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="summary-total-order" class="form-label">Total Pesanan</label>
+                            <div class="input-group">
+                                <span class="input-group-text">Rp</span>
+                                <input type="text" class="form-control bg-light" id="summary-total-order" style="font-size: 1.2rem; font-weight: bold;" readonly>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-primary btn-lg" id="btn-create-order" disabled>
+                                <i class="fas fa-file-invoice"></i> Buat Pesanan
+                            </button>
+                            <button type="button" class="btn btn-info" data-bs-toggle="offcanvas" data-bs-target="#offcanvasSupplierProducts" aria-controls="offcanvasSupplierProducts">
+                                <i class="fas fa-list"></i> Pilih Barang Supplier
+                            </button>
+                            <a href="supplier.php" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Kembali ke Daftar Supplier
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasSupplierProducts" aria-labelledby="offcanvasSupplierProductsLabel">
+    <div class="offcanvas-header">
+        <h5 id="offcanvasSupplierProductsLabel">Barang dari <?= $nama_supplier_perusahaan ?></h5>
+        <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="input-group mb-3">
+            <input type="text" class="form-control" id="offcanvas-search-product" placeholder="Cari kode/nama barang...">
+            <button class="btn btn-primary" type="button" id="btn-offcanvas-search"><i class="fas fa-search"></i></button>
+        </div>
+        <div class="order-item-list" id="offcanvas-product-list">
+            <p class="text-center text-muted">Memuat barang...</p>
+        </div>
+        <div class="d-grid gap-2 mt-3">
+            <button class="btn btn-success" id="btn-add-selected-to-cart">Tambahkan ke Pesanan</button>
+        </div>
+    </div>
+</div>
+
+
 <script>
-function printNota(pembelianId) { window.open(`cetak_nota_pembelian.php?id=${pembelianId}`, '_blank'); }
-function bukaModalPembayaran(id, no, total) {
-    document.getElementById('pembelian-id-input').value = id;
-    document.getElementById('no-pembelian-display').value = no;
-    document.getElementById('total-pembelian-display').value = total;
-    document.getElementById('bukti-transfer-input').value = '';
-    new bootstrap.Modal(document.getElementById('pembayaranModal')).show();
-}
-
 document.addEventListener('DOMContentLoaded', function() {
-    let cart = [];
+    let orderCart = []; // The new cart for order items
     const supplierId = <?= $supplier_id ?>;
-    const userId = <?= $user_id ?>;
-    
-    const daftarBarangModal = new bootstrap.Modal(document.getElementById('daftarBarangModal'));
-    const formatRupiah = (angka) => `Rp ${new Intl.NumberFormat('id-ID').format(angka)}`;
+    const adminId = <?= $admin_id ?>;
+    const adminName = '<?= htmlspecialchars($admin_name) ?>';
+    const supplierCompanyName = '<?= $nama_supplier_perusahaan ?>';
 
-    const imagePreviewModalEl = document.getElementById('imagePreviewModal');
-    if (imagePreviewModalEl) {
-        imagePreviewModalEl.addEventListener('show.bs.modal', function (event) {
-            const triggerElement = event.relatedTarget;
-            const imageSrc = triggerElement.getAttribute('src');
-            const imageAlt = triggerElement.getAttribute('alt');
-            imagePreviewModalEl.querySelector('.modal-title').textContent = 'Preview: ' + imageAlt;
-            imagePreviewModalEl.querySelector('#imagePreviewSrc').src = imageSrc;
-        });
-    }
+    const orderNoInput = document.getElementById('order-no');
+    const orderDateInput = document.getElementById('order-date');
+    const orderCartTableBody = document.querySelector('#order-cart-table tbody');
+    const totalOrderAmountElement = document.getElementById('total-order-amount');
+    const summaryTotalOrderInput = document.getElementById('summary-total-order');
+    const btnCreateOrder = document.getElementById('btn-create-order');
+    const offcanvasProductList = document.getElementById('offcanvas-product-list');
+    const btnAddSelectedToCart = document.getElementById('btn-add-selected-to-cart');
+    const offcanvasSearchInput = document.getElementById('offcanvas-search-product');
+    const btnOffcanvasSearch = document.getElementById('btn-offcanvas-search');
 
-    const renderCart = () => {
-        const tbody = document.getElementById('keranjang-table').querySelector('tbody');
+    // --- UTILITY FUNCTIONS ---
+    const formatRupiah = (angka) => {
+        if (angka === null || isNaN(angka)) return '0';
+        return angka.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    };
+
+    const parseRupiah = (rupiah) => {
+        return parseInt(String(rupiah).replace(/[^0-9]/g, ''), 10) || 0;
+    };
+
+    const showMessage = (title, text, icon) => {
+        Swal.fire({ title, text, icon });
+    };
+
+    // --- ORDER CART LOGIC ---
+    const updateOrderCartDisplay = () => {
+        orderCartTableBody.innerHTML = '';
         let total = 0;
-        if (cart.length === 0) {
-            tbody.innerHTML = `<tr id="empty-cart"><td colspan="5" class="text-center py-3">Keranjang masih kosong</td></tr>`;
+
+        if (orderCart.length === 0) {
+            orderCartTableBody.innerHTML = `
+                <tr id="empty-cart-message">
+                    <td colspan="5" class="text-center py-3">Keranjang pesanan masih kosong</td>
+                </tr>`;
+            btnCreateOrder.disabled = true;
         } else {
-            tbody.innerHTML = '';
-            cart.forEach((item, index) => {
-                const subtotal = item.qty * item.price;
+            btnCreateOrder.disabled = false;
+            orderCart.forEach((item, index) => {
+                const subtotal = item.quantity * item.price_per_item;
                 total += subtotal;
-                const row = document.createElement('tr');
-                row.dataset.index = index;
-                row.innerHTML = `<td>${item.name}</td><td>${formatRupiah(item.price)}</td><td><div class="input-group input-group-sm"><button class="btn btn-secondary btn-decrease" type="button">-</button><input type="number" class="form-control text-center qty-input" value="${item.qty}" min="1"><button class="btn btn-secondary btn-increase" type="button">+</button></div></td><td>${formatRupiah(subtotal)}</td><td><button class="btn btn-danger btn-sm btn-remove" type="button"><i class="fas fa-trash"></i></button></td>`;
-                tbody.appendChild(row);
+                const row = `
+                    <tr data-index="${index}">
+                        <td>${item.nama_barang}<br><small class="text-muted">${item.kode_barang}</small></td>
+                        <td>${formatRupiah(item.price_per_item)}</td>
+                        <td>
+                            <div class="input-group input-group-sm" style="width: 120px;">
+                                <button class="btn btn-secondary btn-decrease-qty" type="button" data-index="${index}">-</button>
+                                <input type="number" class="form-control text-center order-qty-input" value="${item.quantity}" min="1" data-index="${index}">
+                                <button class="btn btn-secondary btn-increase-qty" type="button" data-index="${index}">+</button>
+                            </div>
+                        </td>
+                        <td><strong>Rp ${formatRupiah(subtotal)}</strong></td>
+                        <td>
+                            <button class="btn btn-sm btn-danger btn-remove-item" type="button" data-index="${index}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>`;
+                orderCartTableBody.insertAdjacentHTML('beforeend', row);
             });
         }
-        document.getElementById('total-amount').textContent = formatRupiah(total);
-        document.getElementById('total-pembelian').value = formatRupiah(total);
-        document.getElementById('btn-simpan').disabled = cart.length === 0;
+        totalOrderAmountElement.textContent = 'Rp ' + formatRupiah(total);
+        summaryTotalOrderInput.value = formatRupiah(total);
     };
 
-    const addToCart = (product) => {
-        const existingItem = cart.find(item => item.id == product.id);
-        if (existingItem) { existingItem.qty++; } 
-        else { cart.push({ id: product.id, name: product.nama_barang, price: parseFloat(product.harga_beli), qty: 1 }); }
-        renderCart();
-    };
-    
-    const loadProductsInModal = async (searchTerm = '') => {
-        const tbody = document.querySelector('#table-products tbody');
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center">Memuat...</td></tr>`;
+    // --- OFFCANVAS PRODUCT LIST LOGIC ---
+    const loadSupplierProducts = async (search = '') => {
+        offcanvasProductList.innerHTML = `<p class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Memuat barang...</p>`;
         try {
-            const response = await fetch(`ajax/get_supplier_products.php?supplier_id=${supplierId}&search=${encodeURIComponent(searchTerm)}`);
-            if (!response.ok) throw new Error('Network error');
+            // PERUBAHAN: Hapus p.stok dari query agar tidak ditampilkan
+            const response = await fetch(`ajax/get_supplier_products.php?supplier_id=${supplierId}&search=${encodeURIComponent(search)}`);
+            if (!response.ok) throw new Error('Network response was not ok.');
             const products = await response.json();
-            tbody.innerHTML = '';
+            
+            offcanvasProductList.innerHTML = '';
             if (products.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" class="text-center">Supplier ini belum memiliki barang atau barang tidak ditemukan.</td></tr>`;
+                offcanvasProductList.innerHTML = `<p class="text-center text-muted">Tidak ada barang ditemukan dari supplier ini.</p>`;
                 return;
             }
-            products.forEach(product => {
-                const row = document.createElement('tr');
+
+            products.forEach(p => {
+                const isSelected = orderCart.some(cartItem => cartItem.barang_id_supplier_original === p.id);
                 let fotoHtml;
-                if (product.foto_produk) {
-                    const fotoPath = `uploads/produk/${product.foto_produk}`;
-                    fotoHtml = `<img src="${fotoPath}" alt="${product.nama_barang}" class="img-thumbnail" width="50" style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#imagePreviewModal">`;
+                if (p.foto_produk) {
+                    const fotoPath = `uploads/produk/${p.foto_produk}`;
+                    fotoHtml = `<img src="${fotoPath}" alt="${p.nama_barang}" class="img-thumbnail img-checkbox" width="50" height="50">`;
                 } else {
-                    fotoHtml = `<img src="https://placehold.co/50x50/e2e8f0/adb5bd?text=N/A" alt="Tidak ada foto" class="img-thumbnail">`;
+                    fotoHtml = `<img src="https://placehold.co/50x50/e2e8f0/adb5bd?text=N/A" alt="Tidak ada foto" class="img-thumbnail img-checkbox">`;
                 }
-                row.innerHTML = `<td>${fotoHtml}</td><td>${product.kode_barang}</td><td>${product.nama_barang}</td><td>${formatRupiah(product.harga_beli)}</td><td>${product.stok}</td><td><button class="btn btn-sm btn-primary btn-add-from-modal" data-product='${JSON.stringify(product)}' type="button"><i class="fas fa-plus"></i> Tambah</button></td>`;
-                tbody.appendChild(row);
+                const productHtml = `
+                    <div class="order-item">
+                        <div class="form-check">
+                            <input class="form-check-input item-checkbox" type="checkbox" value="${p.id}" data-product='${JSON.stringify(p)}' ${isSelected ? 'checked disabled' : ''}>
+                        </div>
+                        ${fotoHtml}
+                        <div class="order-item-info">
+                            <strong>${p.nama_barang}</strong><br>
+                            <small class="text-muted">${p.kode_barang} | Harga: Rp ${formatRupiah(p.harga_beli)}</small>
+                        </div>
+                    </div>`;
+                offcanvasProductList.insertAdjacentHTML('beforeend', productHtml);
             });
-        } catch (error) { 
-            console.error('Error loading products:', error);
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Gagal memuat data.</td></tr>`; 
+        } catch (error) {
+            console.error('Error loading supplier products:', error);
+            offcanvasProductList.innerHTML = `<p class="text-center text-danger">Gagal memuat barang supplier.</p>`;
         }
     };
 
-    document.getElementById('daftarBarangModal').addEventListener('show.bs.modal', () => loadProductsInModal());
-    document.getElementById('btn-modal-search').addEventListener('click', () => loadProductsInModal(document.getElementById('modal-search').value));
-    document.getElementById('modal-search').addEventListener('keypress', (e) => { if (e.key === 'Enter') loadProductsInModal(document.getElementById('modal-search').value); });
-    document.getElementById('table-products').addEventListener('click', e => {
-        const button = e.target.closest('.btn-add-from-modal');
-        if (button) {
-            try { const product = JSON.parse(button.dataset.product); addToCart(product); daftarBarangModal.hide(); Swal.fire({title: 'Berhasil!', text: 'Barang ditambahkan ke keranjang.', icon: 'success', timer: 1500, showConfirmButton: false}); }
-            catch (error) { Swal.fire('Error', 'Gagal menambahkan barang.', 'error'); }
-        }
-    });
-    document.getElementById('keranjang-table').addEventListener('click', e => {
-        const row = e.target.closest('tr'); const index = row?.dataset.index;
-        if (index === undefined) return;
-        const itemIndex = parseInt(index);
-        if (e.target.closest('.btn-remove')) { cart.splice(itemIndex, 1); } 
-        else if (e.target.closest('.btn-increase')) { cart[itemIndex].qty++; } 
-        else if (e.target.closest('.btn-decrease')) { if (cart[itemIndex].qty > 1) cart[itemIndex].qty--; }
-        renderCart();
-    });
-    document.getElementById('keranjang-table').addEventListener('change', e => {
-        if (e.target.classList.contains('qty-input')) {
-            const row = e.target.closest('tr'); const index = row?.dataset.index;
-            if (index !== undefined) {
-                const itemIndex = parseInt(index); const newQty = parseInt(e.target.value);
-                if (newQty > 0) { cart[itemIndex].qty = newQty; renderCart(); }
-            }
-        }
-    });
-    document.getElementById('btn-simpan').addEventListener('click', async () => {
-        if(cart.length === 0) { Swal.fire('Peringatan', 'Keranjang masih kosong!', 'warning'); return; }
-        const purchaseData = { no_pembelian: document.getElementById('no-pembelian').value, tanggal: document.getElementById('tanggal').value, supplier_id: supplierId, user_id: userId, total: cart.reduce((sum, item) => sum + (item.qty * item.price), 0), items: cart };
-        const result = await Swal.fire({ title: 'Simpan Pembelian?', text: 'Apakah Anda yakin?', icon: 'question', showCancelButton: true, confirmButtonText: 'Ya, Simpan!', cancelButtonText: 'Batal' });
-        if (result.isConfirmed) {
-            try {
-                const response = await fetch('ajax/save_purchase.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(purchaseData) });
-                if (!response.ok) throw new Error('Network error');
-                const data = await response.json();
-                if (data.success) { Swal.fire('Berhasil!', data.message, 'success').then(() => { location.reload(); }); }
-                else { Swal.fire('Gagal!', data.message || 'Terjadi kesalahan.', 'error'); }
-            } catch (error) { Swal.fire('Error', 'Gagal terhubung ke server', 'error'); }
-        }
-    });
-    document.getElementById('btn-kirim-bukti').addEventListener('click', async function() {
-        const form = document.getElementById('form-pembayaran'); const formData = new FormData(form);
-        const fileInput = document.getElementById('bukti-transfer-input'); const pembelianId = document.getElementById('pembelian-id-input').value;
-        if (!pembelianId) { Swal.fire('Error', 'ID Pembelian tidak valid.', 'error'); return; }
-        if (fileInput.files.length === 0) { Swal.fire('Error', 'Silakan pilih file bukti transfer.', 'error'); return; }
-        formData.set('pembelian_id', pembelianId);
-        this.disabled = true; this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Mengunggah...';
-        try {
-            const response = await fetch('ajax/upload_bukti_pembayaran.php', { method: 'POST', body: formData });
-            if (!response.ok) throw new Error('Network error');
-            const result = await response.json();
-            if (result.success) {
-                new bootstrap.Modal(document.getElementById('pembayaranModal')).hide();
-                Swal.fire('Berhasil!', result.message, 'success').then(() => { location.reload(); });
-            } else { Swal.fire('Gagal!', result.message || 'Terjadi kesalahan.', 'error'); }
-        } catch (error) { Swal.fire('Error', 'Gagal terhubung ke server.', 'error'); }
-        finally { this.disabled = false; this.innerHTML = 'Kirim Bukti'; }
+    // --- EVENT LISTENERS ---
+    const offcanvasElement = document.getElementById('offcanvasSupplierProducts');
+    offcanvasElement.addEventListener('show.bs.offcanvas', () => loadSupplierProducts());
+    offcanvasElement.addEventListener('hidden.bs.offcanvas', () => {
+        // Clear search and reload products if needed when offcanvas is closed
+        offcanvasSearchInput.value = '';
+        loadSupplierProducts(); // Reload to reflect any changes
     });
 
-    renderCart();
+    btnOffcanvasSearch.addEventListener('click', () => loadSupplierProducts(offcanvasSearchInput.value));
+    offcanvasSearchInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') loadSupplierProducts(offcanvasSearchInput.value);
+    });
+
+    btnAddSelectedToCart.addEventListener('click', function() {
+        const selectedCheckboxes = offcanvasProductList.querySelectorAll('.item-checkbox:checked:not(:disabled)');
+        selectedCheckboxes.forEach(checkbox => {
+            const product = JSON.parse(checkbox.dataset.product);
+            const existingItem = orderCart.find(item => item.barang_id_supplier_original === product.id);
+
+            if (!existingItem) {
+                // PERUBAHAN: Hapus validasi stok di sini
+                // Stok akan dikelola oleh supplier saat konfirmasi pesanan
+                orderCart.push({
+                    barang_id_supplier_original: product.id,
+                    kode_barang: product.kode_barang,
+                    nama_barang: product.nama_barang,
+                    price_per_item: parseFloat(product.harga_beli), // Harga beli dari supplier
+                    quantity: 1, // Default quantity
+                    // PERUBAHAN: Hapus stock_supplier dari objek keranjang
+                });
+                checkbox.disabled = true; // Disable once added
+            }
+        });
+        updateOrderCartDisplay();
+        bootstrap.Offcanvas.getInstance(offcanvasElement).hide(); // Hide offcanvas after adding
+    });
+
+    orderCartTableBody.addEventListener('click', function(e) {
+        const target = e.target;
+        const index = target.closest('tr')?.dataset.index;
+
+        if (index === undefined) return;
+
+        const item = orderCart[index];
+        const qtyInput = this.querySelector(`input[data-index="${index}"]`);
+
+        if (target.classList.contains('btn-increase-qty')) {
+            item.quantity++; // Tidak ada lagi batasan stok di frontend
+        } else if (target.classList.contains('btn-decrease-qty')) {
+            if (item.quantity > 1) {
+                item.quantity--;
+            }
+        } else if (target.classList.contains('btn-remove-item')) {
+            Swal.fire({
+                title: 'Hapus Barang?',
+                text: `Hapus ${item.nama_barang} dari pesanan?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Ya, Hapus!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    orderCart.splice(index, 1);
+                    updateOrderCartDisplay();
+                    loadSupplierProducts(); // Reload offcanvas to re-enable checkbox
+                }
+            });
+            return; // Exit to avoid double updateDisplay
+        }
+        updateOrderCartDisplay();
+    });
+
+    orderCartTableBody.addEventListener('change', function(e) {
+        const target = e.target;
+        if (target.classList.contains('order-qty-input')) {
+            const index = target.dataset.index;
+            const newQty = parseInt(target.value);
+            
+            // PERUBAHAN: Hapus validasi maxStock di sini
+            if (isNaN(newQty) || newQty < 1) {
+                orderCart[index].quantity = 1;
+            } else {
+                orderCart[index].quantity = newQty;
+            }
+            updateOrderCartDisplay();
+        }
+    });
+
+    // --- ORDER CREATION SUBMISSION ---
+    btnCreateOrder.addEventListener('click', async function() {
+        if (orderCart.length === 0) {
+            showMessage('Keranjang Kosong', 'Tambahkan barang ke pesanan terlebih dahulu.', 'warning');
+            return;
+        }
+
+        const buyerName = document.getElementById('buyer-name').value.trim();
+        const buyerAddress = document.getElementById('buyer-address').value.trim();
+        const buyerContact = document.getElementById('buyer-contact').value.trim();
+        const receivingWarehouse = document.getElementById('receiving-warehouse').value.trim();
+        const paymentType = document.querySelector('input[name="payment_type"]:checked').value;
+
+        if (!buyerName || !buyerAddress || !buyerContact || !receivingWarehouse) {
+            showMessage('Data Pembeli Belum Lengkap', 'Mohon lengkapi semua informasi pembeli dan gudang penerima.', 'error');
+            return;
+        }
+        
+        // PERUBAHAN: Hapus validasi stok akhir ini dari frontend.
+        // Validasi stok akan dilakukan di backend (ajax/create_order.php)
+        // karena stok bisa berubah antara pemilihan dan pembuatan pesanan.
+
+        const orderData = {
+            order_no: orderNoInput.value,
+            order_date: orderDateInput.value,
+            admin_user_id: adminId,
+            supplier_id: supplierId,
+            total_order_price: parseRupiah(summaryTotalOrderInput.value),
+            buyer_name: buyerName,
+            buyer_address: buyerAddress,
+            buyer_contact: buyerContact,
+            receiving_warehouse: receivingWarehouse,
+            payment_type: paymentType,
+            items: orderCart
+        };
+
+        Swal.fire({
+            title: 'Buat Pesanan?',
+            html: `Anda akan membuat pesanan senilai <strong>Rp ${summaryTotalOrderInput.value}</strong> kepada <strong>${supplierCompanyName}</strong>. Lanjutkan?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, Buat Pesanan!',
+            showLoaderOnConfirm: true,
+            preConfirm: async () => {
+                try {
+                    const response = await fetch('ajax/create_order.php', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(orderData)
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || response.statusText);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    Swal.showValidationMessage(`Gagal: ${error.message || error}`);
+                }
+            },
+            allowOutsideClick: () => !Swal.isLoading()
+        }).then((result) => {
+            if (result.isConfirmed) {
+                if (result.value.success) {
+                    Swal.fire({
+                        title: 'Pesanan Berhasil Dibuat!',
+                        text: result.value.message,
+                        icon: 'success'
+                    }).then(() => {
+                        window.location.href = 'orders.php'; // Redirect to new orders page
+                    });
+                } else {
+                    Swal.fire('Gagal', result.value.message || 'Terjadi kesalahan saat membuat pesanan.', 'error');
+                }
+            }
+        });
+    });
+
+    updateOrderCartDisplay(); // Initial display
 });
 </script>
-
-<?php
-require_once __DIR__ . '/template/footer.php';
-?>

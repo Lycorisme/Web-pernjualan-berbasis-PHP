@@ -26,19 +26,20 @@ $kode_barang = sanitize($_POST['kode_barang'] ?? '');
 $nama_barang = sanitize($_POST['nama_barang'] ?? '');
 $kategori_id = (int)($_POST['kategori_id'] ?? 0);
 $satuan_id = (int)($_POST['satuan_id'] ?? 0);
-$stok = (int)($_POST['stok'] ?? 0);
+// Stok tidak lagi diambil dari input supplier
+// $stok = (int)($_POST['stok'] ?? 0); 
 $supplier_id = $_SESSION['supplier_id'];
 
 // Validasi dasar
 if ($id <= 0 || empty($nama_barang) || $kategori_id <= 0 || $satuan_id <= 0) {
-    echo json_encode(['success' => false, 'message' => 'Data tidak lengkap. Semua field wajib diisi.']);
+    echo json_encode(['success' => false, 'message' => 'Data tidak lengkap. Nama, kategori, dan satuan wajib diisi.']);
     exit;
 }
 
 $new_photo_filename = null;
 $old_photo_filename = null;
 
-// LOGIKA UTAMA: Handle upload foto baru jika ada
+// Handle upload foto baru jika ada
 if (isset($_FILES['foto_produk']) && $_FILES['foto_produk']['error'] === UPLOAD_ERR_OK) {
     
     // 1. Ambil nama foto lama dari DB untuk dihapus nanti
@@ -67,9 +68,10 @@ if (isset($_FILES['foto_produk']) && $_FILES['foto_produk']['error'] === UPLOAD_
 $params = [];
 $types = "";
 
-$sql = "UPDATE barang SET nama_barang = ?, kode_barang = ?, kategori_id = ?, satuan_id = ?, stok = ?";
-array_push($params, $nama_barang, $kode_barang, $kategori_id, $satuan_id, $stok);
-$types .= "ssiii";
+// Hapus 'stok = ?' dari SET clause karena supplier tidak lagi mengelola stok
+$sql = "UPDATE barang SET nama_barang = ?, kode_barang = ?, kategori_id = ?, satuan_id = ?"; 
+array_push($params, $nama_barang, $kode_barang, $kategori_id, $satuan_id);
+$types .= "ssii";
 
 // Jika ada foto baru, tambahkan ke query UPDATE
 if ($new_photo_filename !== null) {

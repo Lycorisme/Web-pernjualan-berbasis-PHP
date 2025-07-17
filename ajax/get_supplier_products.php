@@ -23,8 +23,8 @@ if ($supplier_id <= 0) {
 }
 
 try {
-    // PERUBAHAN: Menambahkan kolom 'foto_produk' ke dalam query SELECT
-    $query = "SELECT id, kode_barang, nama_barang, harga_beli, stok, foto_produk FROM barang WHERE supplier_id = ?";
+    // PERUBAHAN: Menghapus kolom 'stok' dari query SELECT
+    $query = "SELECT id, kode_barang, nama_barang, harga_beli, foto_produk FROM barang WHERE supplier_id = ?";
     $params = [$supplier_id];
     $types = "i";
 
@@ -54,14 +54,13 @@ try {
     $products = [];
 
     while ($row = $result->fetch_assoc()) {
-        // PERUBAHAN: Menambahkan 'foto_produk' ke dalam array JSON yang dikirim
         $products[] = [
             'id' => (int)$row['id'],
             'kode_barang' => $row['kode_barang'],
             'nama_barang' => $row['nama_barang'],
             'harga_beli' => (float)$row['harga_beli'],
-            'stok' => (int)$row['stok'],
-            'foto_produk' => $row['foto_produk'] // <-- Data foto ditambahkan di sini
+            // 'stok' => (int)$row['stok'], // Dihapus karena stok tidak lagi relevan di sini
+            'foto_produk' => $row['foto_produk']
         ];
     }
 
@@ -75,4 +74,3 @@ try {
 }
 
 $koneksi->close();
-?>
